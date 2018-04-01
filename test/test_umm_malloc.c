@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include "stdbool.h"
 #include "stdlib.h"
 #include "string.h"
@@ -7,13 +9,9 @@
 #include "umm_malloc.h"
 #include "umm_malloc_cfg.h"
 
-/* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
-
-#define DBGLOG_LEVEL 0
-
-#include "dbglog/dbglog.h"
-
-char test_umm_heap[UMM_MALLOC_CFG_HEAP_SIZE];
+#define UMM_MALLOC_CFG_HEAP_SIZE 0x10000
+static char g_test_umm_heap[UMM_MALLOC_CFG_HEAP_SIZE];
+static umm_heap_t g_test_heap;
 
 // Note, the block size calculation depends on knowledge of the internals
 // of umm_malloc.c which are not to be exposed to the user of the library
@@ -21,7 +19,7 @@ char test_umm_heap[UMM_MALLOC_CFG_HEAP_SIZE];
 #define UMM_BLOCK_SIZE (8)
 #define UMM_LASTBLOCK ((UMM_MALLOC_CFG_HEAP_SIZE-UMM_BLOCK_SIZE)/UMM_BLOCK_SIZE)
 
-bool check_all_bytes ( uint8_t * p, size_t s, uint8_t v) {
+bool check_all_bytes ( unsigned __int8 * p, unsigned __int64 s, unsigned __int8 v) {
 	while ( (*p == v) && s ) {
 		++p;
 	 	--s;
@@ -31,32 +29,32 @@ bool check_all_bytes ( uint8_t * p, size_t s, uint8_t v) {
 }
 
 bool get_block_is_free ( int  b ) {
-    return ( (((uint16_t *)((void *)(&(((uint64_t *)test_umm_heap)[b]))))[0] & 0x8000) == 0x8000 );
+    return ( (((unsigned __int16 *)((void *)(&(((unsigned __int64 *)g_test_umm_heap)[b]))))[0] & 0x8000) == 0x8000 );
 }
 
-uint16_t get_block_next ( int b ) {
-    return ( ((uint16_t *)((void *)(&(((uint64_t *)test_umm_heap)[b]))))[0] & 0x7FFF );
+unsigned __int16 get_block_next ( int b ) {
+    return ( ((unsigned __int16 *)((void *)(&(((unsigned __int64 *)g_test_umm_heap)[b]))))[0] & 0x7FFF );
 }
 
-uint16_t get_block_prev ( int b ) {
-    return ( ((uint16_t *)((void *)(&(((uint64_t *)test_umm_heap)[b]))))[1] );
+unsigned __int16 get_block_prev ( int b ) {
+    return ( ((unsigned __int16 *)((void *)(&(((unsigned __int64 *)g_test_umm_heap)[b]))))[1] );
 }
 
-uint16_t get_block_next_free ( int b ) {
-    return ( ((uint16_t *)((void *)(&(((uint64_t *)test_umm_heap)[b]))))[2] );
+unsigned __int16 get_block_next_free ( int b ) {
+    return ( ((unsigned __int16 *)((void *)(&(((unsigned __int64 *)g_test_umm_heap)[b]))))[2] );
 }
 
-uint16_t get_block_prev_free ( int b ) {
-    return ( ((uint16_t *)((void *)(&(((uint64_t *)test_umm_heap)[b]))))[3] );
+unsigned __int16 get_block_prev_free ( int b ) {
+    return ( ((unsigned __int16 *)((void *)(&(((unsigned __int64 *)g_test_umm_heap)[b]))))[3] );
 }
 
 struct block_test_values {
-    uint16_t block;
+    unsigned __int16 block;
     bool     is_free;
-    uint16_t next;
-    uint16_t prev;
-    uint16_t next_free;
-    uint16_t prev_free;
+    unsigned __int16 next;
+    unsigned __int16 prev;
+    unsigned __int16 next_free;
+    unsigned __int16 prev_free;
 };
 
 # define ARRAYELEMENTCOUNT(x) (sizeof (x) / sizeof (x)[0])
@@ -68,18 +66,22 @@ char test_msg[256];
 
 bool check_block (struct block_test_values *t)
 {
-        snprintf (block_test_msg,   TEST_MSG_LEN, "\nTest__: Block %04d f %d n %04d p %04d nf %04d pf %04d", t->block
-                                                                                                           , t->is_free
-                                                                                                           , t->next
-                                                                                                           , t->prev
-                                                                                                           , t->next_free
-                                                                                                           , t->prev_free);
-        snprintf (block_actual_msg, TEST_MSG_LEN, "\nActual: Block %04d f %d n %04d p %04d nf %04d pf %04d\n", t->block
-                                                                                                           , get_block_is_free (t->block)
-                                                                                                           , get_block_next(t->block)
-                                                                                                           , get_block_prev(t->block)
-                                                                                                           , get_block_next_free(t->block)
-                                                                                                           , get_block_prev_free(t->block));
+        snprintf (block_test_msg,   TEST_MSG_LEN,
+			"\nTest__: Block %04d f %d n %04d p %04d nf %04d pf %04d"
+			, t->block
+            , t->is_free
+            , t->next
+            , t->prev
+            , t->next_free
+			, t->prev_free);
+        snprintf (block_actual_msg, TEST_MSG_LEN,
+			"\nActual: Block %04d f %d n %04d p %04d nf %04d pf %04d\n"
+			, t->block
+			, get_block_is_free (t->block)
+			, get_block_next(t->block)
+			, get_block_prev(t->block)
+			, get_block_next_free(t->block)
+			, get_block_prev_free(t->block));
         strncpy( test_msg, block_test_msg, 256 );
         strncat( test_msg, block_actual_msg, 256 );
 
@@ -92,7 +94,7 @@ bool check_block (struct block_test_values *t)
         return true;
 }
 
-bool check_blocks (struct block_test_values *t, size_t n)
+bool check_blocks (struct block_test_values *t, unsigned __int64 n)
 {
     int i;
     for (i=0; i<n; ++i) {
@@ -105,7 +107,7 @@ TEST_GROUP(Heap);
 
 TEST_SETUP(Heap)
 {
-    umm_init ();
+	umm_init(&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
 }
 
 TEST_TEAR_DOWN(Heap)
@@ -125,7 +127,7 @@ TEST(Heap, Initialization)
 
 TEST( Heap, FirstMalloc0Bytes )
 {
-    TEST_ASSERT_EQUAL_PTR ((void *)NULL, (umm_malloc (0)));
+    TEST_ASSERT_EQUAL_PTR ((void *)NULL, (umm_malloc (&g_test_heap, 0)));
     TEST_ASSERT_TRUE (check_blocks (Initialization_test_values, ARRAYELEMENTCOUNT(Initialization_test_values)));
 }
 
@@ -138,25 +140,25 @@ struct block_test_values MallocMin_test_values[] =
     
 TEST(Heap, FirstMalloc1Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (1)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 1)));
     TEST_ASSERT_TRUE (check_blocks (MallocMin_test_values, ARRAYELEMENTCOUNT(MallocMin_test_values)));
 }
 
 TEST(Heap, FirstMalloc2Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (2)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 2)));
     TEST_ASSERT_TRUE (check_blocks (MallocMin_test_values, ARRAYELEMENTCOUNT(MallocMin_test_values)));
 }
 
 TEST(Heap, FirstMalloc3Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (3)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 3)));
     TEST_ASSERT_TRUE (check_blocks (MallocMin_test_values, ARRAYELEMENTCOUNT(MallocMin_test_values)));
 }
 
 TEST(Heap, FirstMalloc4Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (4)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 4)));
     TEST_ASSERT_TRUE (check_blocks (MallocMin_test_values, ARRAYELEMENTCOUNT(MallocMin_test_values)));
 }
 
@@ -169,13 +171,13 @@ struct block_test_values MallocSmall_test_values[] =
 
 TEST(Heap, FirstMalloc5Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (5)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 5)));
     TEST_ASSERT_TRUE (check_blocks (MallocSmall_test_values, ARRAYELEMENTCOUNT(MallocSmall_test_values)));
 }
 
 TEST(Heap, FirstMalloc12Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (12)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 12)));
     TEST_ASSERT_TRUE (check_blocks (MallocSmall_test_values, ARRAYELEMENTCOUNT(MallocSmall_test_values)));
 }
 
@@ -188,7 +190,7 @@ struct block_test_values MallocSmallPlus_test_values[] =
 
 TEST(Heap, FirstMalloc13Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (13)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 13)));
     TEST_ASSERT_TRUE (check_blocks (MallocSmallPlus_test_values, ARRAYELEMENTCOUNT(MallocSmallPlus_test_values)));
 }
 
@@ -201,7 +203,7 @@ struct block_test_values MallocMid_test_values[] =
 
 TEST(Heap, FirstMalloc4000Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (4000)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 4000)));
     TEST_ASSERT_TRUE (check_blocks (MallocMid_test_values, ARRAYELEMENTCOUNT(MallocMid_test_values)));
 }
 
@@ -213,13 +215,13 @@ struct block_test_values MallocLarge_test_values[] =
 
 TEST(Heap, FirstMalloc65516Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], (umm_malloc (65516)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], (umm_malloc (&g_test_heap, 65516)));
     TEST_ASSERT_TRUE (check_blocks (MallocLarge_test_values, ARRAYELEMENTCOUNT(MallocLarge_test_values)));
 }
 
 TEST(Heap, FirstMalloc65517Bytes)
 {
-    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_malloc (65517)));
+    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_malloc (&g_test_heap, 65517)));
 }
 
 
@@ -243,7 +245,7 @@ TEST_GROUP(MultiMalloc);
 
 TEST_SETUP(MultiMalloc)
 {
-    umm_init ();
+    umm_init (&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
 }
 
 TEST_TEAR_DOWN(MultiMalloc)
@@ -263,11 +265,11 @@ struct block_test_values MultiMallocManySmall_test_values[] =
 
 TEST(MultiMalloc, ManySmall)
 {
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +  0], umm_malloc(4));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +  8], umm_malloc(4));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 16], umm_malloc(4));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 24], umm_malloc(4));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 32], umm_malloc(4));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +  0], umm_malloc(&g_test_heap, 4));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +  8], umm_malloc(&g_test_heap, 4));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 16], umm_malloc(&g_test_heap, 4));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 24], umm_malloc(&g_test_heap, 4));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 32], umm_malloc(&g_test_heap, 4));
 
     TEST_ASSERT_TRUE (check_blocks (MultiMallocManySmall_test_values, ARRAYELEMENTCOUNT(MultiMallocManySmall_test_values)));
 }
@@ -285,11 +287,11 @@ struct block_test_values MultiMallocManyMed_test_values[] =
 
 TEST(MultiMalloc, ManyMed)
 {
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +     0], umm_malloc(3996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +  4000], umm_malloc(3996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +  8000], umm_malloc(3996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 12000], umm_malloc(3996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 16000], umm_malloc(3996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +     0], umm_malloc(&g_test_heap, 3996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +  4000], umm_malloc(&g_test_heap, 3996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +  8000], umm_malloc(&g_test_heap, 3996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 12000], umm_malloc(&g_test_heap, 3996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 16000], umm_malloc(&g_test_heap, 3996));
 
     TEST_ASSERT_TRUE (check_blocks (MultiMallocManyMed_test_values, ARRAYELEMENTCOUNT(MultiMallocManyMed_test_values)));
 }
@@ -305,10 +307,10 @@ struct block_test_values MultiMallocManyLarge_test_values[] =
 
 TEST(MultiMalloc, ManyLarge)
 {
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 +     0], umm_malloc(19996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 20000], umm_malloc(19996));
-    TEST_ASSERT_EQUAL_PTR ((void *)&test_umm_heap[12 + 40000], umm_malloc(19996));
-    TEST_ASSERT_EQUAL_PTR ((void *)NULL                      , umm_malloc(19996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 +     0], umm_malloc(&g_test_heap, 19996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 20000], umm_malloc(&g_test_heap, 19996));
+    TEST_ASSERT_EQUAL_PTR ((void *)&g_test_umm_heap[12 + 40000], umm_malloc(&g_test_heap, 19996));
+    TEST_ASSERT_EQUAL_PTR ((void *)NULL                      , umm_malloc(&g_test_heap, 19996));
 
     TEST_ASSERT_TRUE (check_blocks (MultiMallocManyLarge_test_values, ARRAYELEMENTCOUNT(MultiMallocManyLarge_test_values)));
 }
@@ -326,13 +328,13 @@ TEST_GROUP(Free);
 
 TEST_SETUP(Free)
 {
-    umm_init ();
+    umm_init (&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
 
-    p[0] = umm_malloc (4);
-    p[1] = umm_malloc (4);
-    p[2] = umm_malloc (4);
-    p[3] = umm_malloc (4);
-    p[4] = umm_malloc (4);
+    p[0] = umm_malloc (&g_test_heap, 4);
+    p[1] = umm_malloc (&g_test_heap, 4);
+    p[2] = umm_malloc (&g_test_heap, 4);
+    p[3] = umm_malloc (&g_test_heap, 4);
+    p[4] = umm_malloc (&g_test_heap, 4);
 }
 
 TEST_TEAR_DOWN(Free)
@@ -341,14 +343,14 @@ TEST_TEAR_DOWN(Free)
 
 TEST(Free, NullPtr)
 {
-    umm_free((void *)NULL);
+    umm_free(&g_test_heap, (void *)NULL);
 }
 
 TEST(Free, BadPtr)
 {
     TEST_PASS();
 
-    umm_free((void *)1);
+    umm_free(&g_test_heap, (void *)1);
 }
 
 struct block_test_values FreeFirst_test_values[] =
@@ -359,8 +361,8 @@ struct block_test_values FreeFirst_test_values[] =
 
 TEST(Free, First)
 {
-    umm_init ();
-    umm_free (umm_malloc(4));
+    umm_init (&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
+    umm_free (&g_test_heap, umm_malloc(&g_test_heap, 4));
     TEST_ASSERT_TRUE (check_blocks (FreeFirst_test_values, ARRAYELEMENTCOUNT(FreeFirst_test_values)));
 }
 
@@ -376,7 +378,7 @@ struct block_test_values FreeLast_test_values[] =
 
 TEST(Free, Last)
 {
-    umm_free (p[4]);
+    umm_free (&g_test_heap, p[4]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeLast_test_values, ARRAYELEMENTCOUNT(FreeLast_test_values)));
 }
@@ -394,7 +396,7 @@ struct block_test_values FreeSecondLast_test_values[] =
 
 TEST(Free, SecondLast)
 {
-    umm_free (p[3]);
+    umm_free (&g_test_heap, p[3]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeSecondLast_test_values, ARRAYELEMENTCOUNT(FreeSecondLast_test_values)));
 }
@@ -411,8 +413,8 @@ struct block_test_values FreeAssimilateUp_test_values[] =
 
 TEST(Free, AssimilateUp)
 {
-    umm_free (p[3]);
-    umm_free (p[2]);
+    umm_free (&g_test_heap, p[3]);
+    umm_free (&g_test_heap, p[2]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateUp_test_values, ARRAYELEMENTCOUNT(FreeAssimilateUp_test_values)));
 }
@@ -429,8 +431,8 @@ struct block_test_values FreeAssimilateDown_test_values[] =
 
 TEST(Free, AssimilateDown)
 {
-    umm_free (p[2]);
-    umm_free (p[3]);
+    umm_free (&g_test_heap, p[2]);
+    umm_free (&g_test_heap, p[3]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateDown_test_values, ARRAYELEMENTCOUNT(FreeAssimilateDown_test_values)));
 }
@@ -446,9 +448,9 @@ struct block_test_values FreeAssimilateUpDown_test_values[] =
 
 TEST(Free, AssimilateUpDown)
 {
-    umm_free (p[3]);
-    umm_free (p[1]);
-    umm_free (p[2]);
+    umm_free (&g_test_heap, p[3]);
+    umm_free (&g_test_heap, p[1]);
+    umm_free (&g_test_heap, p[2]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateUpDown_test_values, ARRAYELEMENTCOUNT(FreeAssimilateUpDown_test_values)));
 }
@@ -464,9 +466,9 @@ struct block_test_values FreeAssimilateDownUp_test_values[] =
 
 TEST(Free, AssimilateDownUp)
 {
-    umm_free (p[2]);
-    umm_free (p[1]);
-    umm_free (p[3]);
+    umm_free (&g_test_heap, p[2]);
+    umm_free (&g_test_heap, p[1]);
+    umm_free (&g_test_heap, p[3]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateDownUp_test_values, ARRAYELEMENTCOUNT(FreeAssimilateDownUp_test_values)));
 }
@@ -483,8 +485,8 @@ struct block_test_values FreeAssimilateFirst_test_values[] =
 
 TEST(Free, AssimilateFirst)
 {
-    umm_free (p[1]);
-    umm_free (p[0]);
+    umm_free (&g_test_heap, p[1]);
+    umm_free (&g_test_heap, p[0]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateFirst_test_values, ARRAYELEMENTCOUNT(FreeAssimilateFirst_test_values)));
 }
@@ -500,8 +502,8 @@ struct block_test_values FreeAssimilateLast_test_values[] =
 
 TEST(Free, AssimilateLast)
 {
-    umm_free (p[3]);
-    umm_free (p[4]);
+    umm_free (&g_test_heap, p[3]);
+    umm_free (&g_test_heap, p[4]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeAssimilateLast_test_values, ARRAYELEMENTCOUNT(FreeAssimilateLast_test_values)));
 }
@@ -520,8 +522,8 @@ struct block_test_values FreeHiLo_test_values[] =
 
 TEST(Free, HiLo)
 {
-    umm_free (p[3]);
-    umm_free (p[1]);
+    umm_free (&g_test_heap, p[3]);
+    umm_free (&g_test_heap, p[1]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeHiLo_test_values, ARRAYELEMENTCOUNT(FreeHiLo_test_values)));
 }
@@ -539,8 +541,8 @@ struct block_test_values FreeLoHi_test_values[] =
 
 TEST(Free, LoHi)
 {
-    umm_free (p[1]);
-    umm_free (p[3]);
+    umm_free (&g_test_heap, p[1]);
+    umm_free (&g_test_heap, p[3]);
 
     TEST_ASSERT_TRUE (check_blocks (FreeLoHi_test_values, ARRAYELEMENTCOUNT(FreeLoHi_test_values)));
 }
@@ -566,7 +568,7 @@ TEST_GROUP(Realloc);
 
 TEST_SETUP(Realloc)
 {
-    umm_init ();
+    umm_init (&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
 }
 
 TEST_TEAR_DOWN(Realloc)
@@ -582,18 +584,18 @@ struct block_test_values ReallocTooBig_test_values[] =
 
 TEST(Realloc, TooBig)
 {
-    void *foo = umm_malloc (4);
+    void *foo = umm_malloc (&g_test_heap, 4);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], foo                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], foo                        );
     TEST_ASSERT_TRUE (check_blocks (ReallocTooBig_test_values, ARRAYELEMENTCOUNT(ReallocTooBig_test_values)));
 
     // Realloc with a request that is too big should return NULL and leave the original memory untouched.
  
-    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (foo,UMM_MALLOC_CFG_HEAP_SIZE*2)));
+    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (&g_test_heap, foo,UMM_MALLOC_CFG_HEAP_SIZE*2)));
     TEST_ASSERT_TRUE (check_blocks (ReallocTooBig_test_values, ARRAYELEMENTCOUNT(ReallocTooBig_test_values)));
 }
 
-struct block_test_values ReallocSameSize_test_values[] =
+struct block_test_values ReallocSameUint64Test_values[] =
     { {0            , false, 1            , 0, 2, 2}
     , {1            , false, 2            , 0, 0, 0}
     , {2            , true,  UMM_LASTBLOCK, 1, 0, 0}
@@ -602,25 +604,25 @@ struct block_test_values ReallocSameSize_test_values[] =
 
 TEST(Realloc, SameSize)
 {
-    void *foo = umm_malloc (2);
+    void *foo = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], foo                        );
-    TEST_ASSERT_TRUE (check_blocks (ReallocSameSize_test_values, ARRAYELEMENTCOUNT(ReallocSameSize_test_values)));
-
-    // Realloc with a request that is same size or block size should leave the original memory untouched.
- 
-    TEST_ASSERT_EQUAL_PTR((void *)foo, (umm_realloc (foo, 2)));
-    TEST_ASSERT_TRUE (check_blocks (ReallocSameSize_test_values, ARRAYELEMENTCOUNT(ReallocSameSize_test_values)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], foo                        );
+    TEST_ASSERT_TRUE (check_blocks (ReallocSameUint64Test_values, ARRAYELEMENTCOUNT(ReallocSameUint64Test_values)));
 
     // Realloc with a request that is same size or block size should leave the original memory untouched.
  
-    TEST_ASSERT_EQUAL_PTR((void *)foo, (umm_realloc (foo, 1)));
-    TEST_ASSERT_TRUE (check_blocks (ReallocSameSize_test_values, ARRAYELEMENTCOUNT(ReallocSameSize_test_values)));
+    TEST_ASSERT_EQUAL_PTR((void *)foo, (&g_test_heap, umm_realloc (&g_test_heap, foo, 2)));
+    TEST_ASSERT_TRUE (check_blocks (ReallocSameUint64Test_values, ARRAYELEMENTCOUNT(ReallocSameUint64Test_values)));
+
+    // Realloc with a request that is same size or block size should leave the original memory untouched.
+ 
+    TEST_ASSERT_EQUAL_PTR((void *)foo, (&g_test_heap, umm_realloc (&g_test_heap, foo, 1)));
+    TEST_ASSERT_TRUE (check_blocks (ReallocSameUint64Test_values, ARRAYELEMENTCOUNT(ReallocSameUint64Test_values)));
  
     // Realloc with a request that is same size or block size should leave the original memory untouched.
  
-    TEST_ASSERT_EQUAL_PTR((void *)foo, (umm_realloc (foo, 4)));
-    TEST_ASSERT_TRUE (check_blocks (ReallocSameSize_test_values, ARRAYELEMENTCOUNT(ReallocSameSize_test_values)));
+    TEST_ASSERT_EQUAL_PTR((void *)foo, (&g_test_heap, umm_realloc (&g_test_heap, foo, 4)));
+    TEST_ASSERT_TRUE (check_blocks (ReallocSameUint64Test_values, ARRAYELEMENTCOUNT(ReallocSameUint64Test_values)));
 }
 
 struct block_test_values ReallocFree_test_values[] =
@@ -631,13 +633,13 @@ struct block_test_values ReallocFree_test_values[] =
 
 TEST(Realloc, Free)
 {
-    void *foo = umm_malloc (2);
+    void *foo = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], foo                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], foo                        );
 
     // Realloc with a request that is 0 size should free the block
  
-    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (foo, 0)));
+    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (&g_test_heap, foo, 0)));
     TEST_ASSERT_TRUE (check_blocks (ReallocFree_test_values, ARRAYELEMENTCOUNT(ReallocFree_test_values)));
 }
 
@@ -650,19 +652,19 @@ struct block_test_values ReallocFreeRealloc_test_values[] =
 
 TEST(Realloc, FreeRealloc)
 {
-    void *foo = umm_malloc (2);
+    void *foo = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], foo                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], foo                        );
     TEST_ASSERT_TRUE (check_blocks (ReallocFreeRealloc_test_values, ARRAYELEMENTCOUNT(ReallocFreeRealloc_test_values)));
 
     // Realloc with a request that is 0 size should free the block
  
-    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (foo, 0)));
+    TEST_ASSERT_EQUAL_PTR((void *)NULL, (umm_realloc (&g_test_heap, foo, 0)));
 
     // Realloc with a request that is same size or block size should leave the original memory untouched.
  
-    TEST_ASSERT_EQUAL_PTR((void *)foo, (umm_realloc (NULL, 4)));
-    TEST_ASSERT_TRUE (check_blocks (ReallocSameSize_test_values, ARRAYELEMENTCOUNT(ReallocSameSize_test_values)));
+    TEST_ASSERT_EQUAL_PTR((void *)foo, (umm_realloc (&g_test_heap, NULL, 4)));
+    TEST_ASSERT_TRUE (check_blocks (ReallocSameUint64Test_values, ARRAYELEMENTCOUNT(ReallocSameUint64Test_values)));
 }
  
 struct block_test_values ReallocAssimilateUp[] =
@@ -675,19 +677,19 @@ struct block_test_values ReallocAssimilateUp[] =
 
 TEST(Realloc, AssimilateUp)
 {
-    void *mem0 = umm_malloc (2);
-    void *mem1 = umm_malloc (2);
-    void *mem2 = umm_malloc (2);
+    void *mem0 = umm_malloc (&g_test_heap, 2);
+    void *mem1 = umm_malloc (&g_test_heap, 2);
+    void *mem2 = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], mem0                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[20], mem1                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[28], mem2                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], mem0                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[20], mem1                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[28], mem2                        );
 
     // Free the last block and then realloc the middle block to use it
  
-    umm_free( mem2 );
+    umm_free(&g_test_heap, mem2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)mem1, (umm_realloc (mem1, 5)));
+    TEST_ASSERT_EQUAL_PTR((void *)mem1, (umm_realloc (&g_test_heap, mem1, 5)));
     TEST_ASSERT_TRUE (check_blocks (ReallocAssimilateUp, ARRAYELEMENTCOUNT(ReallocAssimilateUp)));
 }
 
@@ -701,19 +703,19 @@ struct block_test_values ReallocAssimilateDown[] =
 
 TEST(Realloc, AssimilateDown)
 {
-    void *mem0 = umm_malloc (2);
-    void *mem1 = umm_malloc (2);
-    void *mem2 = umm_malloc (2);
+    void *mem0 = umm_malloc (&g_test_heap, 2);
+    void *mem1 = umm_malloc (&g_test_heap, 2);
+    void *mem2 = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], mem0                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[20], mem1                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[28], mem2                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], mem0                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[20], mem1                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[28], mem2                        );
 
     // Free the last block and then realloc the middle block to use it
  
-    umm_free( mem0 );
+    umm_free(&g_test_heap, mem0 );
 
-    TEST_ASSERT_EQUAL_PTR((void *)mem0, (umm_realloc (mem1, 5)));
+    TEST_ASSERT_EQUAL_PTR((void *)mem0, (umm_realloc (&g_test_heap, mem1, 5)));
     TEST_ASSERT_TRUE (check_blocks (ReallocAssimilateDown, ARRAYELEMENTCOUNT(ReallocAssimilateDown)));
 }
 
@@ -727,22 +729,22 @@ struct block_test_values ReallocAssimilateUpDown[] =
 
 TEST(Realloc, AssimilateUpDown)
 {
-    void *mem0 = umm_malloc (2);
-    void *mem1 = umm_malloc (2);
-    void *mem2 = umm_malloc (2);
-    void *mem3 = umm_malloc (2);
+    void *mem0 = umm_malloc (&g_test_heap, 2);
+    void *mem1 = umm_malloc (&g_test_heap, 2);
+    void *mem2 = umm_malloc (&g_test_heap, 2);
+    void *mem3 = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], mem0                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[20], mem1                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[28], mem2                        );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[36], mem3                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], mem0                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[20], mem1                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[28], mem2                        );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[36], mem3                        );
 
     // Free the last block and then realloc the middle block to use it
  
-    umm_free( mem0 );
-    umm_free( mem2 );
+    umm_free(&g_test_heap, mem0 );
+    umm_free(&g_test_heap, mem2 );
 
-    TEST_ASSERT_EQUAL_PTR((void *)mem0, (umm_realloc (mem1, 20)));
+    TEST_ASSERT_EQUAL_PTR((void *)mem0, (umm_realloc (&g_test_heap, mem1, 20)));
     TEST_ASSERT_TRUE (check_blocks (ReallocAssimilateUpDown, ARRAYELEMENTCOUNT(ReallocAssimilateUpDown)));
 }
 
@@ -758,17 +760,17 @@ struct block_test_values ReallocNewBlock[] =
 
 TEST(Realloc, NewBlock)
 {
-    void *mem0 = umm_malloc (2);
-    void *mem1 = umm_malloc (2);
-    void *mem2 = umm_malloc (2);
+    void *mem0 = umm_malloc (&g_test_heap, 2);
+    void *mem1 = umm_malloc (&g_test_heap, 2);
+    void *mem2 = umm_malloc (&g_test_heap, 2);
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[12], mem0 );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[20], mem1 );
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[28], mem2 );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[12], mem0 );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[20], mem1 );
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[28], mem2 );
 
     /* Realloc the middle block - should need a totally new block */
 
-    TEST_ASSERT_EQUAL_PTR((void *)&test_umm_heap[36], (umm_realloc(mem1, 5)));
+    TEST_ASSERT_EQUAL_PTR((void *)&g_test_umm_heap[36], (umm_realloc(&g_test_heap, mem1, 5)));
     TEST_ASSERT_TRUE (check_blocks (ReallocNewBlock, ARRAYELEMENTCOUNT(ReallocNewBlock)));
 }
 
@@ -790,7 +792,7 @@ TEST_GROUP(Poison);
 
 TEST_SETUP(Poison)
 {
-    umm_init ();
+    umm_init (&g_test_umm_heap, sizeof(g_test_umm_heap), &g_test_heap);
 }
 
 TEST_TEAR_DOWN(Poison)
@@ -799,34 +801,34 @@ TEST_TEAR_DOWN(Poison)
 
 TEST(Poison, First)
 {
-    TEST_ASSERT_NOT_NULL (umm_poison_malloc(4));
+    TEST_ASSERT_NOT_NULL (umm_poison_malloc(&g_test_heap, 4));
 }
 
 TEST(Poison, ClobberLeading)
 {
-    void *p = umm_poison_malloc(64);
+    void *p = umm_poison_malloc(&g_test_heap, 64);
     
-    p = p - 1;
+    p = (void *)((unsigned __int64)p - 1);
     *(char *)p = 0x00;
 
-    TEST_ASSERT_EQUAL(0, POISON_CHECK());
+    TEST_ASSERT_EQUAL(0, POISON_CHECK(&g_test_heap));
 }
 
 TEST(Poison, ClobberTrailing)
 {
-    void *p = umm_poison_malloc(64);
+    void *p = umm_poison_malloc(&g_test_heap, 64);
     
-    p = p + 64;
+    p = (void *)((unsigned __int64)p + 64);
     *(char *)p = 0x00;
 
-    TEST_ASSERT_EQUAL(0, POISON_CHECK());
+    TEST_ASSERT_EQUAL(0, POISON_CHECK(&g_test_heap));
 }
 
 TEST(Poison, Random)
 {
     void *p[100];
     int i,j;
-    size_t s;
+    unsigned __int64 s;
 
     srand(0);
 
@@ -835,17 +837,17 @@ TEST(Poison, Random)
  
     for (i=0; i<100000; ++i) {
 
-        TEST_ASSERT_NOT_EQUAL(0, INTEGRITY_CHECK());
-        TEST_ASSERT_NOT_EQUAL(0, POISON_CHECK());
+        TEST_ASSERT_NOT_EQUAL(0, INTEGRITY_CHECK(&g_test_heap));
+        TEST_ASSERT_NOT_EQUAL(0, POISON_CHECK(&g_test_heap));
 
         j = rand()%100;
         s = rand()%64;
 
         if (p[j]) {
-            umm_poison_free(p[j]);
+            umm_poison_free(&g_test_heap, p[j]);
         }
 
-        p[j] = umm_poison_malloc(s);
+        p[j] = umm_poison_malloc(&g_test_heap, s);
 
         if (0==s) {
             TEST_ASSERT_NULL( p[j] );
@@ -859,7 +861,7 @@ TEST(Poison, Stress)
 {
   void *p[256];
   int i,j;
-  size_t s;
+  unsigned __int64 s;
 
   srand(0);
 
@@ -879,7 +881,7 @@ TEST(Poison, Stress)
       case  5:
       case  6:
         {
-          p[j] = umm_poison_realloc(p[j], 0);
+          p[j] = umm_poison_realloc(&g_test_heap, p[j], 0);
           TEST_ASSERT_NULL( p[j] );
           break;
         }
@@ -887,7 +889,7 @@ TEST(Poison, Stress)
       case  8:
         {
           s = rand()%64;
-          p[j] = umm_poison_realloc(p[j], s );
+          p[j] = umm_poison_realloc(&g_test_heap, p[j], s );
           if( s ) {
               TEST_ASSERT_NOT_NULL( p[j] );
               memset(p[j], 0xfe, s);
@@ -903,7 +905,7 @@ TEST(Poison, Stress)
       case 12:
         {
           s = rand()%100;
-          p[j] = umm_poison_realloc(p[j], s );
+          p[j] = umm_poison_realloc(&g_test_heap, p[j], s );
 
           if( s ) {
               TEST_ASSERT_NOT_NULL( p[j] );
@@ -918,8 +920,8 @@ TEST(Poison, Stress)
       case 14:
         {
           s = rand()%200;
-          umm_poison_free(p[j]);
-          p[j] = umm_poison_calloc( 1, s );
+          umm_poison_free(&g_test_heap, p[j]);
+          p[j] = umm_poison_calloc(&g_test_heap, 1, s );
 
           if( s ) {
               TEST_ASSERT_NOT_NULL( p[j] );
@@ -934,8 +936,8 @@ TEST(Poison, Stress)
       default:
         {
           s = rand()%400;
-          umm_poison_free(p[j]);
-          p[j] = umm_poison_malloc( s );
+          umm_poison_free(&g_test_heap, p[j]);
+          p[j] = umm_poison_malloc(&g_test_heap, s );
 
           if( s ) {
               TEST_ASSERT_NOT_NULL( p[j] );
@@ -947,12 +949,12 @@ TEST(Poison, Stress)
         }
     }
 
-    TEST_ASSERT_NOT_EQUAL(0, INTEGRITY_CHECK());
-    TEST_ASSERT_NOT_EQUAL(0, POISON_CHECK());
+    TEST_ASSERT_NOT_EQUAL(0, INTEGRITY_CHECK(&g_test_heap));
+    TEST_ASSERT_NOT_EQUAL(0, POISON_CHECK(&g_test_heap));
   }
 
-  umm_info( 0, true );
-  DBGLOG_FORCE( true, "Free Heap Size: %ld\n", umm_free_heap_size() );
+  umm_info(&g_test_heap, 0, true );
+  DBGLOG_FORCE( true, "Free Heap Size: %lld\n", umm_free_heap_size(&g_test_heap) );
 }
 
 TEST_GROUP_RUNNER(Poison)

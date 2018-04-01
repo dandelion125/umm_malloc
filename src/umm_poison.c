@@ -6,7 +6,7 @@
  * Yields a size of the poison for the block of size `s`.
  * If `s` is 0, returns 0.
  */
-static size_t poison_size(size_t s) {
+static unsigned __int64 poison_size(unsigned __int64 s) {
     return(s ? (UMM_POISON_SIZE_BEFORE +
                 sizeof(UMM_POISONED_BLOCK_LEN_TYPE) +
                 UMM_POISON_SIZE_AFTER)
@@ -16,7 +16,7 @@ static size_t poison_size(size_t s) {
 /*
  * Print memory contents starting from given `ptr`
  */
-static void dump_mem ( const unsigned char *ptr, size_t len ) {
+static void dump_mem ( const unsigned char *ptr, unsigned __int64 len ) {
   while (len--) {
     DBGLOG_ERROR(" 0x%.2x", (unsigned int)(*ptr++));
   }
@@ -25,7 +25,7 @@ static void dump_mem ( const unsigned char *ptr, size_t len ) {
 /*
  * Put poison data at given `ptr` and `poison_size`
  */
-static void put_poison( unsigned char *ptr, size_t poison_size ) {
+static void put_poison( unsigned char *ptr, unsigned __int64 poison_size ) {
   memset(ptr, POISON_BYTE, poison_size);
 }
 
@@ -36,9 +36,9 @@ static void put_poison( unsigned char *ptr, size_t poison_size ) {
  * If poison is there, returns 1.
  * Otherwise, prints the appropriate message, and returns 0.
  */
-static int check_poison( const unsigned char *ptr, size_t poison_size,
+static int check_poison( const unsigned char *ptr, unsigned __int64 poison_size,
     const char *where) {
-  size_t i;
+  unsigned __int64 i;
   int ok = 1;
 
   for (i = 0; i < poison_size; i++) {
@@ -61,11 +61,12 @@ static int check_poison( const unsigned char *ptr, size_t poison_size,
  * Check if a block is properly poisoned. Must be called only for non-free
  * blocks.
  */
-static int check_poison_block( umm_block *pblock ) {
+static int check_poison_block( umm_block_t *pblock ) {
   int ok = 1;
 
   if (pblock->header.used.next & UMM_FREELIST_MASK) {
-    DBGLOG_ERROR( "check_poison_block is called for free block 0x%lx\n", (unsigned long)pblock);
+    DBGLOG_ERROR( "check_poison_block is called for free block 0x%lx\n", 
+		(unsigned long)pblock);
   } else {
     /* the block is used; let's check poison */
     unsigned char *pc = (unsigned char *)pblock->body.data;
@@ -95,8 +96,8 @@ clean:
  *
  * `size_w_poison` is a size of the whole block, including a poison.
  */
-static void *get_poisoned( unsigned char *ptr, size_t size_w_poison ) {
-  if (size_w_poison != 0 && ptr != NULL) {
+static void *get_poisoned( unsigned char *ptr, unsigned __int64 size_w_poison ) {
+  if (size_w_poison != 0 && ptr != 0) {
 
     /* Poison beginning and the end of the allocated chunk */
     put_poison(ptr + sizeof(UMM_POISONED_BLOCK_LEN_TYPE),
@@ -118,18 +119,18 @@ static void *get_poisoned( unsigned char *ptr, size_t size_w_poison ) {
  * Takes "poisoned" pointer (i.e. pointer returned from `get_poisoned()`),
  * and checks that the poison of this particular block is still there.
  *
- * Returns unpoisoned pointer, i.e. actual pointer to the allocated memory.
+ * Returns un-poisoned pointer, i.e. actual pointer to the allocated memory.
  */
-static void *get_unpoisoned( unsigned char *ptr ) {
-  if (ptr != NULL) {
+static void *get_unpoisoned( umm_heap_t *heap, unsigned char *ptr ) {
+  if (ptr != 0) {
     unsigned short int c;
 
     ptr -= (sizeof(UMM_POISONED_BLOCK_LEN_TYPE) + UMM_POISON_SIZE_BEFORE);
 
     /* Figure out which block we're in. Note the use of truncated division... */
-    c = (((char *)ptr)-(char *)(&(umm_heap[0])))/sizeof(umm_block);
+    c = (unsigned short)(((char *)ptr)-(char *)(&heap->root[0]))/sizeof(umm_block_t);
 
-    check_poison_block(&UMM_BLOCK(c));
+    check_poison_block(&UMM_BLOCK(heap, c));
   }
 
   return ptr;
@@ -139,12 +140,12 @@ static void *get_unpoisoned( unsigned char *ptr ) {
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_poison_malloc( size_t size ) {
+void *umm_poison_malloc( umm_heap_t *heap, unsigned __int64 size ) {
   void *ret;
 
   size += poison_size(size);
 
-  ret = umm_malloc( size );
+  ret = umm_malloc( heap, size );
 
   ret = get_poisoned(ret, size);
 
@@ -153,16 +154,17 @@ void *umm_poison_malloc( size_t size ) {
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_poison_calloc( size_t num, size_t item_size ) {
+void *umm_poison_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int64 item_size ) {
   void *ret;
-  size_t size = item_size * num;
+  unsigned __int64 size = item_size * num;
 
   size += poison_size(size);
 
-  ret = umm_malloc(size);
+  ret = umm_malloc(heap, size);
   
-  if (NULL != ret)
-      memset(ret, 0x00, size);
+  if (ret) {
+	  memset(ret, 0x00, size);
+  }
 
   ret = get_poisoned(ret, size);
 
@@ -171,13 +173,13 @@ void *umm_poison_calloc( size_t num, size_t item_size ) {
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_poison_realloc( void *ptr, size_t size ) {
+void *umm_poison_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
   void *ret;
 
-  ptr = get_unpoisoned(ptr);
+  ptr = get_unpoisoned(heap, ptr);
 
   size += poison_size(size);
-  ret = umm_realloc( ptr, size );
+  ret = umm_realloc( heap, ptr, size );
 
   ret = get_poisoned(ret, size);
 
@@ -186,11 +188,11 @@ void *umm_poison_realloc( void *ptr, size_t size ) {
 
 /* ------------------------------------------------------------------------ */
 
-void umm_poison_free( void *ptr ) {
+void umm_poison_free( umm_heap_t *heap, void *ptr ) {
 
-  ptr = get_unpoisoned(ptr);
+  ptr = get_unpoisoned(heap, ptr);
 
-  umm_free( ptr );
+  umm_free( heap, ptr );
 }
 
 /*
@@ -198,27 +200,27 @@ void umm_poison_free( void *ptr ) {
  * blocks.
  */
 
-int umm_poison_check(void) {
+int umm_poison_check( umm_heap_t *heap ) {
   int ok = 1;
   unsigned short int cur;
     
-  if (umm_heap == NULL) {
-    umm_init();
+  if (!heap) {
+    return 0;
   }
 
   /* Now iterate through the blocks list */
-  cur = UMM_NBLOCK(0) & UMM_BLOCKNO_MASK;
+  cur = UMM_NBLOCK(heap, 0) & UMM_BLOCKNO_MASK;
 
-  while( UMM_NBLOCK(cur) & UMM_BLOCKNO_MASK ) {
-    if ( !(UMM_NBLOCK(cur) & UMM_FREELIST_MASK) ) {
+  while( UMM_NBLOCK(heap, cur) & UMM_BLOCKNO_MASK ) {
+    if ( !(UMM_NBLOCK(heap, cur) & UMM_FREELIST_MASK) ) {
       /* This is a used block (not free), so, check its poison */
-      ok = check_poison_block(&UMM_BLOCK(cur));
+      ok = check_poison_block(&UMM_BLOCK(heap, cur));
       if (!ok){
         break;
       }
     }
 
-    cur = UMM_NBLOCK(cur) & UMM_BLOCKNO_MASK;
+    cur = UMM_NBLOCK(heap, cur) & UMM_BLOCKNO_MASK;
   }
 
   return ok;

@@ -27,56 +27,53 @@
  * ----------------------------------------------------------------------------
  */
 
-#include <stdio.h>
 #include <string.h>
+
+#define DBGLOG_LEVEL 0
+#define DBGLOG_FUNCTION
+#include "dbglog/dbglog.h"
 
 #include "umm_malloc.h"
 
 #include "umm_malloc_cfg.h"   /* user-dependent */
 
-/* Use the default DBGLOG_LEVEL and DBGLOG_FUNCTION */
-
-#define DBGLOG_LEVEL 0
-
-#include "dbglog/dbglog.h"
-
 /* ------------------------------------------------------------------------- */
 
-UMM_H_ATTPACKPRE typedef struct umm_ptr_t {
+#pragma pack(push, 1)
+
+typedef struct umm_ptr_s {
   unsigned short int next;
   unsigned short int prev;
-} UMM_H_ATTPACKSUF umm_ptr;
+} umm_ptr_t;
 
-
-UMM_H_ATTPACKPRE typedef struct umm_block_t {
+typedef struct umm_block_s {
   union {
-    umm_ptr used;
+    umm_ptr_t used;
   } header;
   union {
-    umm_ptr free;
+    umm_ptr_t free;
     unsigned char data[4];
   } body;
-} UMM_H_ATTPACKSUF umm_block;
+} umm_block_t;
+
+#pragma pack(pop)
 
 #define UMM_FREELIST_MASK (0x8000)
 #define UMM_BLOCKNO_MASK  (0x7FFF)
 
 /* ------------------------------------------------------------------------- */
 
-umm_block *umm_heap = NULL;
-unsigned short int umm_numblocks = 0;
-
-#define UMM_NUMBLOCKS (umm_numblocks)
+#define UMM_NUMBLOCKS(heap) ((heap)->numblocks)
 
 /* ------------------------------------------------------------------------ */
 
-#define UMM_BLOCK(b)  (umm_heap[b])
+#define UMM_BLOCK(heap, b)  ((heap)->root[b])
 
-#define UMM_NBLOCK(b) (UMM_BLOCK(b).header.used.next)
-#define UMM_PBLOCK(b) (UMM_BLOCK(b).header.used.prev)
-#define UMM_NFREE(b)  (UMM_BLOCK(b).body.free.next)
-#define UMM_PFREE(b)  (UMM_BLOCK(b).body.free.prev)
-#define UMM_DATA(b)   (UMM_BLOCK(b).body.data)
+#define UMM_NBLOCK(heap, b) (UMM_BLOCK((heap), (b)).header.used.next)
+#define UMM_PBLOCK(heap, b) (UMM_BLOCK((heap), (b)).header.used.prev)
+#define UMM_NFREE(heap, b)  (UMM_BLOCK((heap), (b)).body.free.next)
+#define UMM_PFREE(heap, b)  (UMM_BLOCK((heap), (b)).body.free.prev)
+#define UMM_DATA(heap, b)   (UMM_BLOCK((heap), (b)).body.data)
 
 /* -------------------------------------------------------------------------
  * There are additional files that may be included here - normally it's
@@ -92,7 +89,7 @@ unsigned short int umm_numblocks = 0;
 
 /* ------------------------------------------------------------------------ */
 
-static unsigned short int umm_blocks( size_t size ) {
+static unsigned short int umm_blocks( unsigned __int64 size ) {
 
   /*
    * The calculation of the block size is not too difficult, but there are
@@ -103,7 +100,7 @@ static unsigned short int umm_blocks( size_t size ) {
    * of size is doing.
    */
 
-  if( size <= (sizeof(((umm_block *)0)->body)) )
+  if( size <= (sizeof(((umm_block_t *)0)->body)) )
     return( 1 );
 
   /*
@@ -111,9 +108,9 @@ static unsigned short int umm_blocks( size_t size ) {
    * additional whole blocks the size of an umm_block are required.
    */
 
-  size -= ( 1 + (sizeof(((umm_block *)0)->body)) );
+  size -= ( 1 + (sizeof(((umm_block_t *)0)->body)) );
 
-  return( 2 + size/(sizeof(umm_block)) );
+  return (unsigned short)( 2 + size/(sizeof(umm_block_t)) );
 }
 
 /* ------------------------------------------------------------------------ */
@@ -125,28 +122,29 @@ static unsigned short int umm_blocks( size_t size ) {
  *
  * Note that free pointers are NOT modified by this function.
  */
-static void umm_split_block( unsigned short int c,
+static void umm_split_block( umm_heap_t *heap, 
+	unsigned short int c,
     unsigned short int blocks,
     unsigned short int new_freemask ) {
 
-  UMM_NBLOCK(c+blocks) = (UMM_NBLOCK(c) & UMM_BLOCKNO_MASK) | new_freemask;
-  UMM_PBLOCK(c+blocks) = c;
+  UMM_NBLOCK(heap, c+blocks) = (UMM_NBLOCK(heap, c) & UMM_BLOCKNO_MASK) | new_freemask;
+  UMM_PBLOCK(heap, c+blocks) = c;
 
-  UMM_PBLOCK(UMM_NBLOCK(c) & UMM_BLOCKNO_MASK) = (c+blocks);
-  UMM_NBLOCK(c)                                = (c+blocks);
+  UMM_PBLOCK(heap, UMM_NBLOCK(heap, c) & UMM_BLOCKNO_MASK) = (c+blocks);
+  UMM_NBLOCK(heap, c)                                = (c+blocks);
 }
 
 /* ------------------------------------------------------------------------ */
 
-static void umm_disconnect_from_free_list( unsigned short int c ) {
+static void umm_disconnect_from_free_list( umm_heap_t *heap, unsigned short int c ) {
   /* Disconnect this block from the FREE list */
 
-  UMM_NFREE(UMM_PFREE(c)) = UMM_NFREE(c);
-  UMM_PFREE(UMM_NFREE(c)) = UMM_PFREE(c);
+  UMM_NFREE(heap, UMM_PFREE(heap, c)) = UMM_NFREE(heap, c);
+  UMM_PFREE(heap, UMM_NFREE(heap, c)) = UMM_PFREE(heap, c);
 
   /* And clear the free block indicator */
 
-  UMM_NBLOCK(c) &= (~UMM_FREELIST_MASK);
+  UMM_NBLOCK(heap, c) &= (~UMM_FREELIST_MASK);
 }
 
 /* ------------------------------------------------------------------------
@@ -154,9 +152,9 @@ static void umm_disconnect_from_free_list( unsigned short int c ) {
  * have the UMM_FREELIST_MASK bit set!
  */
 
-static void umm_assimilate_up( unsigned short int c ) {
+static void umm_assimilate_up( umm_heap_t *heap, unsigned short int c ) {
 
-  if( UMM_NBLOCK(UMM_NBLOCK(c)) & UMM_FREELIST_MASK ) {
+  if( UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_FREELIST_MASK ) {
     /*
      * The next block is a free block, so assimilate up and remove it from
      * the free list
@@ -166,12 +164,12 @@ static void umm_assimilate_up( unsigned short int c ) {
 
     /* Disconnect the next block from the FREE list */
 
-    umm_disconnect_from_free_list( UMM_NBLOCK(c) );
+    umm_disconnect_from_free_list( heap, UMM_NBLOCK(heap, c) );
 
     /* Assimilate the next block with this one */
 
-    UMM_PBLOCK(UMM_NBLOCK(UMM_NBLOCK(c)) & UMM_BLOCKNO_MASK) = c;
-    UMM_NBLOCK(c) = UMM_NBLOCK(UMM_NBLOCK(c)) & UMM_BLOCKNO_MASK;
+    UMM_PBLOCK(heap, UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_BLOCKNO_MASK) = c;
+    UMM_NBLOCK(heap, c) = UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_BLOCKNO_MASK;
   }
 }
 
@@ -180,21 +178,27 @@ static void umm_assimilate_up( unsigned short int c ) {
  * have the UMM_FREELIST_MASK bit set!
  */
 
-static unsigned short int umm_assimilate_down( unsigned short int c, unsigned short int freemask ) {
+static unsigned short int umm_assimilate_down( umm_heap_t *heap, 
+	unsigned short int c, 
+	unsigned short int freemask ) {
 
-  UMM_NBLOCK(UMM_PBLOCK(c)) = UMM_NBLOCK(c) | freemask;
-  UMM_PBLOCK(UMM_NBLOCK(c)) = UMM_PBLOCK(c);
+  UMM_NBLOCK(heap, UMM_PBLOCK(heap, c)) = UMM_NBLOCK(heap, c) | freemask;
+  UMM_PBLOCK(heap, UMM_NBLOCK(heap, c)) = UMM_PBLOCK(heap, c);
 
-  return( UMM_PBLOCK(c) );
+  return( UMM_PBLOCK(heap, c) );
 }
 
 /* ------------------------------------------------------------------------- */
 
-void umm_init( void ) {
+void  umm_init( void *heap_address, unsigned __int64 heap_size, umm_heap_t *heap ) {
+  if ((!heap_address) || (0 == heap_size) || (!heap)) {
+		return; // Invalid parameters
+  }
+
   /* init heap pointer and size, and memset it to 0 */
-  umm_heap = (umm_block *)UMM_MALLOC_CFG_HEAP_ADDR;
-  umm_numblocks = (UMM_MALLOC_CFG_HEAP_SIZE / sizeof(umm_block));
-  memset(umm_heap, 0x00, UMM_MALLOC_CFG_HEAP_SIZE);
+  heap->root = (umm_block_t *)heap_address;
+  heap->numblocks = (unsigned short)(heap_size / sizeof(umm_block_t));
+  memset(heap->root, 0, heap_size);
 
   /* setup initial blank heap structure */
   {
@@ -203,12 +207,12 @@ void umm_init( void ) {
     /* index of the 1st `umm_block` */
     const unsigned short int block_1th = 1;
     /* index of the latest `umm_block` */
-    const unsigned short int block_last = UMM_NUMBLOCKS - 1;
+    const unsigned short int block_last = UMM_NUMBLOCKS(heap) - 1;
 
     /* setup the 0th `umm_block`, which just points to the 1st */
-    UMM_NBLOCK(block_0th) = block_1th;
-    UMM_NFREE(block_0th)  = block_1th;
-    UMM_PFREE(block_0th)  = block_1th;
+    UMM_NBLOCK(heap, block_0th) = block_1th;
+    UMM_NFREE(heap, block_0th)  = block_1th;
+    UMM_PFREE(heap, block_0th)  = block_1th;
 
     /*
      * Now, we need to set the whole heap space as a huge free block. We should
@@ -228,10 +232,10 @@ void umm_init( void ) {
      *
      * And it's the last free block, so the next free block is 0.
      */
-    UMM_NBLOCK(block_1th) = block_last | UMM_FREELIST_MASK;
-    UMM_NFREE(block_1th)  = 0;
-    UMM_PBLOCK(block_1th) = block_0th;
-    UMM_PFREE(block_1th)  = block_0th;
+    UMM_NBLOCK(heap, block_1th) = block_last | UMM_FREELIST_MASK;
+    UMM_NFREE(heap, block_1th)  = 0;
+    UMM_PBLOCK(heap, block_1th) = block_0th;
+    UMM_PFREE(heap, block_1th)  = block_0th;
 
     /*
      * latest `umm_block` has pointers:
@@ -241,22 +245,25 @@ void umm_init( void ) {
      *
      * It's not a free block, so we don't touch NFREE / PFREE at all.
      */
-    UMM_NBLOCK(block_last) = 0;
-    UMM_PBLOCK(block_last) = block_1th;
+    UMM_NBLOCK(heap, block_last) = 0;
+    UMM_PBLOCK(heap, block_last) = block_1th;
   }
 }
 
 /* ------------------------------------------------------------------------ */
 
-void umm_free( void *ptr ) {
+void umm_free( umm_heap_t *heap, void *ptr ) {
 
   unsigned short int c;
+
+  if (!heap) {
+	  return;
+  }
 
   /* If we're being asked to free a NULL pointer, well that's just silly! */
 
   if( (void *)0 == ptr ) {
     DBGLOG_DEBUG( "free a null pointer -> do nothing\n" );
-
     return;
   }
 
@@ -274,21 +281,21 @@ void umm_free( void *ptr ) {
 
   /* Figure out which block we're in. Note the use of truncated division... */
 
-  c = (((char *)ptr)-(char *)(&(umm_heap[0])))/sizeof(umm_block);
+  c = (unsigned short)(((char *)ptr)-(char *)(&heap->root[0]))/sizeof(umm_block_t);
 
   DBGLOG_DEBUG( "Freeing block %6i\n", c );
 
   /* Now let's assimilate this block with the next one if possible. */
 
-  umm_assimilate_up( c );
+  umm_assimilate_up(heap, c);
 
   /* Then assimilate with the previous block if possible */
 
-  if( UMM_NBLOCK(UMM_PBLOCK(c)) & UMM_FREELIST_MASK ) {
+  if( UMM_NBLOCK(heap, UMM_PBLOCK(heap, c)) & UMM_FREELIST_MASK ) {
 
     DBGLOG_DEBUG( "Assimilate down to next block, which is FREE\n" );
 
-    c = umm_assimilate_down(c, UMM_FREELIST_MASK);
+    c = umm_assimilate_down(heap, c, UMM_FREELIST_MASK);
   } else {
     /*
      * The previous block is not a free block, so add this one to the head
@@ -297,12 +304,12 @@ void umm_free( void *ptr ) {
 
     DBGLOG_DEBUG( "Just add to head of free list\n" );
 
-    UMM_PFREE(UMM_NFREE(0)) = c;
-    UMM_NFREE(c)            = UMM_NFREE(0);
-    UMM_PFREE(c)            = 0;
-    UMM_NFREE(0)            = c;
+    UMM_PFREE(heap, UMM_NFREE(heap, 0)) = c;
+    UMM_NFREE(heap, c)            = UMM_NFREE(heap, 0);
+    UMM_PFREE(heap, c)            = 0;
+    UMM_NFREE(heap, 0)            = c;
 
-    UMM_NBLOCK(c)          |= UMM_FREELIST_MASK;
+    UMM_NBLOCK(heap, c)          |= UMM_FREELIST_MASK;
   }
 
   /* Release the critical section... */
@@ -311,7 +318,7 @@ void umm_free( void *ptr ) {
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_malloc( size_t size ) {
+void *umm_malloc( umm_heap_t *heap, unsigned __int64 size ) {
   unsigned short int blocks;
   unsigned short int blockSize = 0;
 
@@ -320,23 +327,10 @@ void *umm_malloc( size_t size ) {
 
   unsigned short int cf;
 
-  if (umm_heap == NULL) {
-    umm_init();
+  if ((!heap) || (0 == size)) {
+    return 0;
   }
-
-  /*
-   * the very first thing we do is figure out if we're being asked to allocate
-   * a size of 0 - and if we are we'll simply return a null pointer. if not
-   * then reduce the size by 1 byte so that the subsequent calculations on
-   * the number of blocks to allocate are easier...
-   */
-
-  if( 0 == size ) {
-    DBGLOG_DEBUG( "malloc a block of 0 bytes -> do nothing\n" );
-
-    return( (void *)NULL );
-  }
-
+  
   /* Protect the critical section... */
   UMM_CRITICAL_ENTRY();
 
@@ -350,30 +344,28 @@ void *umm_malloc( size_t size ) {
    * algorithm
    */
 
-  cf = UMM_NFREE(0);
+  cf = UMM_NFREE(heap, 0);
 
-  bestBlock = UMM_NFREE(0);
+  bestBlock = UMM_NFREE(heap, 0);
   bestSize  = 0x7FFF;
 
   while( cf ) {
-    blockSize = (UMM_NBLOCK(cf) & UMM_BLOCKNO_MASK) - cf;
+    blockSize = (UMM_NBLOCK(heap, cf) & UMM_BLOCKNO_MASK) - cf;
 
     DBGLOG_TRACE( "Looking at block %6i size %6i\n", cf, blockSize );
 
-#if defined UMM_BEST_FIT
+#ifndef UMM_FIRST_FIT
     if( (blockSize >= blocks) && (blockSize < bestSize) ) {
       bestBlock = cf;
       bestSize  = blockSize;
     }
-#elif defined UMM_FIRST_FIT
+#else
     /* This is the first block that fits! */
     if( (blockSize >= blocks) )
       break;
-#else
-#  error "No UMM_*_FIT is defined - check umm_malloc_cfg.h"
 #endif
 
-    cf = UMM_NFREE(cf);
+    cf = UMM_NFREE(heap, cf);
   }
 
   if( 0x7FFF != bestSize ) {
@@ -381,7 +373,7 @@ void *umm_malloc( size_t size ) {
     blockSize = bestSize;
   }
 
-  if( UMM_NBLOCK(cf) & UMM_BLOCKNO_MASK && blockSize >= blocks ) {
+  if( UMM_NBLOCK(heap, cf) & UMM_BLOCKNO_MASK && blockSize >= blocks ) {
     /*
      * This is an existing block in the memory heap, we just need to split off
      * what we need, unlink it from the free list and mark it as in use, and
@@ -395,7 +387,7 @@ void *umm_malloc( size_t size ) {
 
       /* Disconnect this block from the FREE list */
 
-      umm_disconnect_from_free_list( cf );
+      umm_disconnect_from_free_list( heap, cf );
 
     } else {
       /* It's not an exact fit and we need to split off a block. */
@@ -405,7 +397,7 @@ void *umm_malloc( size_t size ) {
        * split current free block `cf` into two blocks. The first one will be
        * returned to user, so it's not free, and the second one will be free.
        */
-      umm_split_block( cf, blocks, UMM_FREELIST_MASK /*new block is free*/ );
+      umm_split_block( heap, cf, blocks, UMM_FREELIST_MASK /*new block is free*/ );
 
       /*
        * `umm_split_block()` does not update the free pointers (it affects
@@ -415,12 +407,12 @@ void *umm_malloc( size_t size ) {
        */
 
       /* previous free block */
-      UMM_NFREE( UMM_PFREE(cf) ) = cf + blocks;
-      UMM_PFREE( cf + blocks ) = UMM_PFREE(cf);
+      UMM_NFREE(heap, UMM_PFREE(heap, cf) ) = cf + blocks;
+      UMM_PFREE(heap, cf + blocks ) = UMM_PFREE(heap, cf);
 
       /* next free block */
-      UMM_PFREE( UMM_NFREE(cf) ) = cf + blocks;
-      UMM_NFREE( cf + blocks ) = UMM_NFREE(cf);
+      UMM_PFREE(heap, UMM_NFREE(heap, cf) ) = cf + blocks;
+      UMM_NFREE(heap, cf + blocks ) = UMM_NFREE(heap, cf);
     }
   } else {
     /* Out of memory */
@@ -430,18 +422,18 @@ void *umm_malloc( size_t size ) {
     /* Release the critical section... */
     UMM_CRITICAL_EXIT();
 
-    return( (void *)NULL );
+    return 0;
   }
 
   /* Release the critical section... */
   UMM_CRITICAL_EXIT();
 
-  return( (void *)&UMM_DATA(cf) );
+  return( (void *)&UMM_DATA(heap, cf) );
 }
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_realloc( void *ptr, size_t size ) {
+void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
 
   unsigned short int blocks;
   unsigned short int blockSize;
@@ -450,42 +442,42 @@ void *umm_realloc( void *ptr, size_t size ) {
 
   unsigned short int c;
 
-  size_t curSize;
+  unsigned __int64 curSize;
 
-  if (umm_heap == NULL) {
-    umm_init();
+  if (!heap) {
+    return 0;
   }
 
   /*
-   * This code looks after the case of a NULL value for ptr. The ANSI C
-   * standard says that if ptr is NULL and size is non-zero, then we've
-   * got to work the same a malloc(). If size is also 0, then our version
-   * of malloc() returns a NULL pointer, which is OK as far as the ANSI C
-   * standard is concerned.
-   */
+  * This code looks after the case of a NULL value for ptr. The ANSI C
+  * standard says that if ptr is NULL and size is non-zero, then we've
+  * got to work the same a malloc(). If size is also 0, then our version
+  * of malloc() returns a NULL pointer, which is OK as far as the ANSI C
+  * standard is concerned.
+  */
 
-  if( ((void *)NULL == ptr) ) {
-    DBGLOG_DEBUG( "realloc the NULL pointer - call malloc()\n" );
+  if (((void *)NULL == ptr)) {
+	  DBGLOG_DEBUG("realloc the NULL pointer - call malloc()\n");
 
-    return( umm_malloc(size) );
+	  return umm_malloc(heap, size);
   }
 
   /*
-   * Now we're sure that we have a non_NULL ptr, but we're not sure what
-   * we should do with it. If the size is 0, then the ANSI C standard says that
-   * we should operate the same as free.
-   */
+  * Now we're sure that we have a non_NULL ptr, but we're not sure what
+  * we should do with it. If the size is 0, then the ANSI C standard says that
+  * we should operate the same as free.
+  */
 
-  if( 0 == size ) {
-    DBGLOG_DEBUG( "realloc to 0 size, just free the block\n" );
+  if (0 == size) {
+	  DBGLOG_DEBUG("realloc to 0 size, just free the block\n");
 
-    umm_free( ptr );
+	  umm_free(heap, ptr);
 
-    return( (void *)NULL );
+	  return NULL;
   }
 
   /*
-   * Otherwise we need to actually do a reallocation. A naiive approach
+   * Otherwise we need to actually do a reallocation. A naive approach
    * would be to malloc() a new block of the correct size, copy the old data
    * to the new block, and then free the old block.
    *
@@ -497,15 +489,15 @@ void *umm_realloc( void *ptr, size_t size ) {
 
   /* Figure out which block we're in. Note the use of truncated division... */
 
-  c = (((char *)ptr)-(char *)(&(umm_heap[0])))/sizeof(umm_block);
+  c = (unsigned short)(((char *)ptr)-(char *)(&heap->root[0]))/sizeof(umm_block_t);
 
   /* Figure out how big this block is ... the free bit is not set :-) */
 
-  blockSize = (UMM_NBLOCK(c) - c);
+  blockSize = (UMM_NBLOCK(heap, c) - c);
 
   /* Figure out how many bytes are in this block */
 
-  curSize   = (blockSize*sizeof(umm_block))-(sizeof(((umm_block *)0)->header));
+  curSize   = (blockSize*sizeof(umm_block_t))-(sizeof(((umm_block_t *)0)->header));
 
   /* Protect the critical section... */
   UMM_CRITICAL_ENTRY();
@@ -518,15 +510,17 @@ void *umm_realloc( void *ptr, size_t size ) {
    * are free!
    */
 
-  if ((UMM_NBLOCK(UMM_NBLOCK(c)) & UMM_FREELIST_MASK)) {
-      nextBlockSize = (UMM_NBLOCK(UMM_NBLOCK(c)) & UMM_BLOCKNO_MASK) - UMM_NBLOCK(c);
+  if ((UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_FREELIST_MASK)) {
+      nextBlockSize = (UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_BLOCKNO_MASK)
+		  - UMM_NBLOCK(heap, c);
   }
 
-  if ((UMM_NBLOCK(UMM_PBLOCK(c)) & UMM_FREELIST_MASK)) {
-      prevBlockSize = (c - UMM_PBLOCK(c));
+  if ((UMM_NBLOCK(heap, UMM_PBLOCK(heap, c)) & UMM_FREELIST_MASK)) {
+      prevBlockSize = (c - UMM_PBLOCK(heap, c));
   }
 
-  DBGLOG_DEBUG( "realloc blocks %i blockSize %i nextBlockSize %i prevBlockSize %i\n", blocks, blockSize, nextBlockSize, prevBlockSize );
+  DBGLOG_DEBUG( "realloc blocks %i blockSize %i nextBlockSize %i prevBlockSize %i\n",
+	  blocks, blockSize, nextBlockSize, prevBlockSize );
 
   /*
    * Ok, now that we're here we know how many blocks we want and the current
@@ -557,33 +551,33 @@ void *umm_realloc( void *ptr, size_t size ) {
         /* This space intentionally left blank */
     } else if ((blockSize + nextBlockSize) >= blocks) {
         DBGLOG_DEBUG( "realloc using next block - %i\n", blocks );
-        umm_assimilate_up( c );
+        umm_assimilate_up( heap, c );
         blockSize += nextBlockSize;
     } else if ((prevBlockSize + blockSize) >= blocks) {
         DBGLOG_DEBUG( "realloc using prev block - %i\n", blocks );
-        umm_disconnect_from_free_list( UMM_PBLOCK(c) );
-        c = umm_assimilate_down(c, 0);
-        memmove( (void *)&UMM_DATA(c), ptr, curSize );
-        ptr = (void *)&UMM_DATA(c);
+        umm_disconnect_from_free_list( heap, UMM_PBLOCK(heap, c) );
+        c = umm_assimilate_down( heap, c, 0);
+        memmove( (void *)&UMM_DATA(heap, c), ptr, curSize );
+        ptr = (void *)&UMM_DATA(heap, c);
         blockSize += prevBlockSize;
     } else if ((prevBlockSize + blockSize + nextBlockSize) >= blocks) {
         DBGLOG_DEBUG( "realloc using prev and next block - %i\n", blocks );
-        umm_assimilate_up( c );
-        umm_disconnect_from_free_list( UMM_PBLOCK(c) );
-        c = umm_assimilate_down(c, 0);
-        memmove( (void *)&UMM_DATA(c), ptr, curSize );
-        ptr = (void *)&UMM_DATA(c);
+        umm_assimilate_up( heap, c );
+        umm_disconnect_from_free_list( heap, UMM_PBLOCK(heap, c) );
+        c = umm_assimilate_down(heap, c, 0);
+        memmove( (void *)&UMM_DATA(heap, c), ptr, curSize );
+        ptr = (void *)&UMM_DATA(heap, c);
         blockSize += (prevBlockSize + nextBlockSize);
     } else {
         DBGLOG_DEBUG( "realloc a completely new block %i\n", blocks );
         void *oldptr = ptr;
-        if( (ptr = umm_malloc( size )) ) {
+        if( (ptr = umm_malloc( heap, size )) ) {
             DBGLOG_DEBUG( "realloc %i to a bigger block %i, copy, and free the old\n", blockSize, blocks );
             memcpy( ptr, oldptr, curSize );
-            umm_free( oldptr );
+            umm_free( heap, oldptr );
         } else {
             DBGLOG_DEBUG( "realloc %i to a bigger block %i failed - return NULL and leave the old block!\n", blockSize, blocks );
-            /* This space intentionally left blnk */
+            /* This space intentionally left blank */
         }
         blockSize = blocks;
     }
@@ -594,8 +588,8 @@ void *umm_realloc( void *ptr, size_t size ) {
 
     if (blockSize > blocks ) {
         DBGLOG_DEBUG( "split and free %i blocks from %i\n", blocks, blockSize );
-        umm_split_block( c, blocks, 0 );
-        umm_free( (void *)&UMM_DATA(c+blocks) );
+        umm_split_block( heap, c, blocks, 0 );
+        umm_free( heap, (void *)&UMM_DATA(heap, c+blocks) );
     }
 
     /* Release the critical section... */
@@ -606,16 +600,16 @@ void *umm_realloc( void *ptr, size_t size ) {
 
 /* ------------------------------------------------------------------------ */
 
-void *umm_calloc( size_t num, size_t item_size ) {
+void *umm_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int64 item_size ) {
   void *ret;
 
-  ret = umm_malloc((size_t)(item_size * num));
+  ret = umm_malloc( heap, (unsigned __int64)(item_size * num));
 
-  if (ret)
-      memset(ret, 0x00, (size_t)(item_size * num));
+  if (ret) {
+	  memset(ret, 0x00, (unsigned __int64)(item_size * num));
+  }
 
   return ret;
 }
 
 /* ------------------------------------------------------------------------ */
-

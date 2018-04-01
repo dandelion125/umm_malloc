@@ -9,3 +9,13 @@
 
 # Unity Test Framework output directory
 build
+*.suo
+*.user
+*.obj
+*.log
+*.tlog
+*.idb
+*.pdb
+*.opendb
+*.db
+*.lib

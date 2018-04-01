@@ -17,9 +17,13 @@
 
 UMM_HEAP_INFO ummHeapInfo;
 
-void *umm_info( void *ptr, int force ) {
+void *umm_info(umm_heap_t *heap, void *ptr, int force) {
 
   unsigned short int blockNo = 0;
+
+  if ((!heap) || (!ptr)) {
+	  return 0; // Invalid parameters
+  }
 
   /* Protect the critical section... */
   UMM_CRITICAL_ENTRY();
@@ -31,14 +35,14 @@ void *umm_info( void *ptr, int force ) {
   memset( &ummHeapInfo, 0, sizeof( ummHeapInfo ) );
 
   DBGLOG_FORCE( force, "+----------+-------+--------+--------+-------+--------+--------+\n" );
-  DBGLOG_FORCE( force, "|0x%08lx|B %5i|NB %5i|PB %5i|Z %5i|NF %5i|PF %5i|\n",
-      (unsigned long)(&UMM_BLOCK(blockNo)),
+  DBGLOG_FORCE( force, "|0x%016llx|B %5i|NB %5i|PB %5i|Z %5i|NF %5i|PF %5i|\n",
+      (unsigned __int64)(&UMM_BLOCK(heap, blockNo)),
       blockNo,
-      UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK,
-      UMM_PBLOCK(blockNo),
-      (UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK )-blockNo,
-      UMM_NFREE(blockNo),
-      UMM_PFREE(blockNo) );
+      UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK,
+      UMM_PBLOCK(heap, blockNo),
+      (UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK )-blockNo,
+      UMM_NFREE(heap, blockNo),
+      UMM_PFREE(heap, blockNo) );
 
   /*
    * Now loop through the block lists, and keep track of the number and size
@@ -46,36 +50,36 @@ void *umm_info( void *ptr, int force ) {
    * a value of zero...
    */
 
-  blockNo = UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK;
+  blockNo = UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK;
 
-  while( UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK ) {
-    size_t curBlocks = (UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK )-blockNo;
+  while( UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK ) {
+    unsigned __int64 curBlocks = (UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK )-blockNo;
 
     ++ummHeapInfo.totalEntries;
-    ummHeapInfo.totalBlocks += curBlocks;
+    ummHeapInfo.totalBlocks += (unsigned short)curBlocks;
 
     /* Is this a free block? */
 
-    if( UMM_NBLOCK(blockNo) & UMM_FREELIST_MASK ) {
+    if( UMM_NBLOCK(heap, blockNo) & UMM_FREELIST_MASK ) {
       ++ummHeapInfo.freeEntries;
-      ummHeapInfo.freeBlocks += curBlocks;
+      ummHeapInfo.freeBlocks += (unsigned short)curBlocks;
 
       if (ummHeapInfo.maxFreeContiguousBlocks < curBlocks) {
-        ummHeapInfo.maxFreeContiguousBlocks = curBlocks;
+        ummHeapInfo.maxFreeContiguousBlocks = (unsigned short)curBlocks;
       }
 
-      DBGLOG_FORCE( force, "|0x%08lx|B %5i|NB %5i|PB %5i|Z %5u|NF %5i|PF %5i|\n",
-          (unsigned long)(&UMM_BLOCK(blockNo)),
+      DBGLOG_FORCE( force, "|0x%016llx|B %5i|NB %5i|PB %5i|Z %5u|NF %5i|PF %5i|\n",
+          (unsigned __int64)(&UMM_BLOCK(heap, blockNo)),
           blockNo,
-          UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK,
-          UMM_PBLOCK(blockNo),
+          UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK,
+          UMM_PBLOCK(heap, blockNo),
           (unsigned int)curBlocks,
-          UMM_NFREE(blockNo),
-          UMM_PFREE(blockNo) );
+          UMM_NFREE(heap, blockNo),
+          UMM_PFREE(heap, blockNo) );
 
       /* Does this block address match the ptr we may be trying to free? */
 
-      if( ptr == &UMM_BLOCK(blockNo) ) {
+      if( ptr == &UMM_BLOCK(heap, blockNo) ) {
 
         /* Release the critical section... */
         UMM_CRITICAL_EXIT();
@@ -84,17 +88,17 @@ void *umm_info( void *ptr, int force ) {
       }
     } else {
       ++ummHeapInfo.usedEntries;
-      ummHeapInfo.usedBlocks += curBlocks;
+      ummHeapInfo.usedBlocks += (unsigned short)curBlocks;
 
-      DBGLOG_FORCE( force, "|0x%08lx|B %5i|NB %5i|PB %5i|Z %5u|\n",
-          (unsigned long)(&UMM_BLOCK(blockNo)),
+      DBGLOG_FORCE( force, "|0x%016llx|B %5i|NB %5i|PB %5i|Z %5u|\n",
+          (unsigned __int64)(&UMM_BLOCK(heap, blockNo)),
           blockNo,
-          UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK,
-          UMM_PBLOCK(blockNo),
+          UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK,
+          UMM_PBLOCK(heap, blockNo),
           (unsigned int)curBlocks );
     }
 
-    blockNo = UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK;
+    blockNo = UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK;
   }
 
   /*
@@ -103,23 +107,23 @@ void *umm_info( void *ptr, int force ) {
    */
 
   {
-    size_t curBlocks = UMM_NUMBLOCKS-blockNo;
-    ummHeapInfo.freeBlocks  += curBlocks;
-    ummHeapInfo.totalBlocks += curBlocks;
+    unsigned __int64 curBlocks = UMM_NUMBLOCKS(heap)-blockNo;
+    ummHeapInfo.freeBlocks  += (unsigned short)curBlocks;
+    ummHeapInfo.totalBlocks += (unsigned short)curBlocks;
 
     if (ummHeapInfo.maxFreeContiguousBlocks < curBlocks) {
-      ummHeapInfo.maxFreeContiguousBlocks = curBlocks;
+      ummHeapInfo.maxFreeContiguousBlocks = (unsigned short)curBlocks;
     }
   }
 
-  DBGLOG_FORCE( force, "|0x%08lx|B %5i|NB %5i|PB %5i|Z %5i|NF %5i|PF %5i|\n",
-      (unsigned long)(&UMM_BLOCK(blockNo)),
+  DBGLOG_FORCE( force, "|0x%016llx|B %5i|NB %5i|PB %5i|Z %5i|NF %5i|PF %5i|\n",
+      (unsigned __int64)(&UMM_BLOCK(heap, blockNo)),
       blockNo,
-      UMM_NBLOCK(blockNo) & UMM_BLOCKNO_MASK,
-      UMM_PBLOCK(blockNo),
-      UMM_NUMBLOCKS-blockNo,
-      UMM_NFREE(blockNo),
-      UMM_PFREE(blockNo) );
+      UMM_NBLOCK(heap, blockNo) & UMM_BLOCKNO_MASK,
+      UMM_PBLOCK(heap, blockNo),
+      UMM_NUMBLOCKS(heap)-blockNo,
+      UMM_NFREE(heap, blockNo),
+      UMM_PFREE(heap, blockNo) );
 
   DBGLOG_FORCE( force, "+----------+-------+--------+--------+-------+--------+--------+\n" );
 
@@ -138,14 +142,17 @@ void *umm_info( void *ptr, int force ) {
   /* Release the critical section... */
   UMM_CRITICAL_EXIT();
 
-  return( NULL );
+  return 0;
 }
 
 /* ------------------------------------------------------------------------ */
 
-size_t umm_free_heap_size( void ) {
-  umm_info(NULL, 0);
-  return (size_t)ummHeapInfo.freeBlocks * sizeof(umm_block);
+unsigned __int64 umm_free_heap_size( umm_heap_t *heap ) {
+  if (!heap) {
+  	return 0;
+  }
+  umm_info(heap, 0, 0);
+  return (unsigned __int64)ummHeapInfo.freeBlocks * sizeof(umm_block_t);
 }
 
 /* ------------------------------------------------------------------------ */

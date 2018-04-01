@@ -22,25 +22,26 @@
  * This way, we ensure that the free flag is in sync with the free pointers
  * chain.
  */
-int umm_integrity_check(void) {
+int umm_integrity_check(umm_heap_t *heap) {
   int ok = 1;
   unsigned short int prev;
   unsigned short int cur;
 
-  if (umm_heap == NULL) {
-    umm_init();
+  if (!heap) {
+	ok = 0;
+    goto clean;
   }
 
   /* Iterate through all free blocks */
   prev = 0;
   while(1) {
-    cur = UMM_NFREE(prev);
+    cur = UMM_NFREE(heap, prev);
 
     /* Check that next free block number is valid */
-    if (cur >= UMM_NUMBLOCKS) {
-      printf("heap integrity broken: too large next free num: %d "
+    if (cur >= UMM_NUMBLOCKS(heap)) {
+      DBGLOG_INFO("heap integrity broken: too large next free num: %d "
           "(in block %d, addr 0x%lx)\n", cur, prev,
-          (unsigned long)&UMM_NBLOCK(prev));
+          (unsigned long)&UMM_NBLOCK(heap, prev));
       ok = 0;
       goto clean;
     }
@@ -50,15 +51,15 @@ int umm_integrity_check(void) {
     }
 
     /* Check if prev free block number matches */
-    if (UMM_PFREE(cur) != prev) {
-      printf("heap integrity broken: free links don't match: "
+    if (UMM_PFREE(heap, cur) != prev) {
+      DBGLOG_INFO("heap integrity broken: free links don't match: "
           "%d -> %d, but %d -> %d\n",
           prev, cur, cur, UMM_PFREE(cur));
       ok = 0;
       goto clean;
     }
 
-    UMM_PBLOCK(cur) |= UMM_FREELIST_MASK;
+    UMM_PBLOCK(heap, cur) |= UMM_FREELIST_MASK;
 
     prev = cur;
   }
@@ -66,13 +67,13 @@ int umm_integrity_check(void) {
   /* Iterate through all blocks */
   prev = 0;
   while(1) {
-    cur = UMM_NBLOCK(prev) & UMM_BLOCKNO_MASK;
+    cur = UMM_NBLOCK(heap, prev) & UMM_BLOCKNO_MASK;
 
     /* Check that next block number is valid */
-    if (cur >= UMM_NUMBLOCKS) {
-      printf("heap integrity broken: too large next block num: %d "
+    if (cur >= UMM_NUMBLOCKS(heap)) {
+      DBGLOG_ERROR("heap integrity broken: too large next block num: %d "
           "(in block %d, addr 0x%lx)\n", cur, prev,
-          (unsigned long)&UMM_NBLOCK(prev));
+          (unsigned long)&UMM_NBLOCK(heap, prev));
       ok = 0;
       goto clean;
     }
@@ -82,13 +83,13 @@ int umm_integrity_check(void) {
     }
 
     /* make sure the free mark is appropriate, and unmark it */
-    if ((UMM_NBLOCK(cur) & UMM_FREELIST_MASK)
-        != (UMM_PBLOCK(cur) & UMM_FREELIST_MASK))
+    if ((UMM_NBLOCK(heap, cur) & UMM_FREELIST_MASK)
+        != (UMM_PBLOCK(heap, cur) & UMM_FREELIST_MASK))
     {
-      printf("heap integrity broken: mask wrong at addr 0x%lx: n=0x%x, p=0x%x\n",
+	  DBGLOG_ERROR("heap integrity broken: mask wrong at addr 0x%lx: n=0x%x, p=0x%x\n",
           (unsigned long)&UMM_NBLOCK(cur),
-          (UMM_NBLOCK(cur) & UMM_FREELIST_MASK),
-          (UMM_PBLOCK(cur) & UMM_FREELIST_MASK)
+          (UMM_NBLOCK(heap, cur) & UMM_FREELIST_MASK),
+          (UMM_PBLOCK(heap, cur) & UMM_FREELIST_MASK)
           );
       ok = 0;
       goto clean;
@@ -96,21 +97,21 @@ int umm_integrity_check(void) {
 
     /* make sure the block list is sequential */
     if (cur <= prev ) {
-     printf("heap integrity broken: next block %d is before prev this one "
+	  DBGLOG_ERROR("heap integrity broken: next block %d is before prev this one "
           "(in block %d, addr 0x%lx)\n", cur, prev,
-          (unsigned long)&UMM_NBLOCK(prev));
+          (unsigned long)&UMM_NBLOCK(heap, prev));
       ok = 0;
       goto clean;
     }
 
-/* unmark */
-    UMM_PBLOCK(cur) &= UMM_BLOCKNO_MASK;
+	/* unmark */
+    UMM_PBLOCK(heap, cur) &= UMM_BLOCKNO_MASK;
 
     /* Check if prev block number matches */
-    if (UMM_PBLOCK(cur) != prev) {
-      printf("heap integrity broken: block links don't match: "
+    if (UMM_PBLOCK(heap, cur) != prev) {
+	  DBGLOG_ERROR("heap integrity broken: block links don't match: "
           "%d -> %d, but %d -> %d\n",
-          prev, cur, cur, UMM_PBLOCK(cur));
+          prev, cur, cur, UMM_PBLOCK(heap, cur));
       ok = 0;
       goto clean;
     }

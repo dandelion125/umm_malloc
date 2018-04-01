@@ -39,19 +39,14 @@
  * ----------------------------------------------------------------------------
  */
 
-extern char test_umm_heap[];
+#include <dbglog/dbglog.h>
 
-/* Start addresses and the size of the heap */
-#define UMM_MALLOC_CFG_HEAP_ADDR (test_umm_heap)
-#define UMM_MALLOC_CFG_HEAP_SIZE 0x10000
+#include "umm_malloc.h"
 
 /* A couple of macros to make packing structures less compiler dependent */
-
-#define UMM_H_ATTPACKPRE
-#define UMM_H_ATTPACKSUF __attribute__((__packed__))
-
-#define UMM_BEST_FIT
-#undef  UMM_FIRST_FIT
+#ifdef UMM_FIRST_FIT
+#undef UMM_FIRST_FIT
+#endif
 
 /*
  * -D UMM_INFO :
@@ -79,8 +74,8 @@ extern char test_umm_heap[];
 
   extern UMM_HEAP_INFO ummHeapInfo;
 
-  void *umm_info( void *ptr, int force );
-  size_t umm_free_heap_size( void );
+  void *umm_info( umm_heap_t *heap, void *ptr, int force );
+  unsigned __int64 umm_free_heap_size( umm_heap_t *heap );
 
 #else
 #endif
@@ -115,10 +110,9 @@ extern char test_umm_heap[];
 #define UMM_INTEGRITY_CHECK
 
 #ifdef UMM_INTEGRITY_CHECK
-   int umm_integrity_check( void );
-#  define INTEGRITY_CHECK() umm_integrity_check()
-   extern void umm_corruption(void);
-#  define UMM_HEAP_CORRUPTION_CB() printf( "Heap Corruption!" )
+#  define INTEGRITY_CHECK(heap) umm_integrity_check(heap)
+   int umm_integrity_check( umm_heap_t *heap );
+#  define UMM_HEAP_CORRUPTION_CB() DBGLOG_ERROR("Heap Corruption!")
 #else
 #  define INTEGRITY_CHECK() 0
 #endif
@@ -158,12 +152,12 @@ extern char test_umm_heap[];
 #define UMM_POISONED_BLOCK_LEN_TYPE short
 
 #ifdef UMM_POISON_CHECK
-   void *umm_poison_malloc( size_t size );
-   void *umm_poison_calloc( size_t num, size_t size );
-   void *umm_poison_realloc( void *ptr, size_t size );
-   void  umm_poison_free( void *ptr );
-   int   umm_poison_check( void );
-#  define POISON_CHECK() umm_poison_check()
+   void *umm_poison_malloc( umm_heap_t *heap, unsigned __int64 size );
+   void *umm_poison_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int64 size );
+   void *umm_poison_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size );
+   void  umm_poison_free( umm_heap_t *heap, void *ptr );
+   int   umm_poison_check( umm_heap_t *heap );
+#  define POISON_CHECK(heap) umm_poison_check(heap)
 #else
 #  define POISON_CHECK() 0
 #endif
