@@ -27,8 +27,6 @@
  * ----------------------------------------------------------------------------
  */
 
-#include <string.h>
-
 #define DBGLOG_LEVEL 0
 #define DBGLOG_FUNCTION
 #include "dbglog/dbglog.h"
@@ -36,6 +34,100 @@
 #include "umm_malloc.h"
 
 #include "umm_malloc_cfg.h"   /* user-dependent */
+
+// Disable 'warning C4706: assignment within conditional expression'
+#pragma warning(push)
+#pragma warning( disable : 4706)
+
+// We define these intrinsic functions ourselves to so we can remove the 
+// standard library dependency
+static void * __cdecl memcpy(
+	void* pvDst,
+	void const* pvSrc,
+	unsigned __int64 cbSize);
+
+static void * __cdecl memset(
+	void* pvDst,
+	int iValue,
+	unsigned __int64 cbSize);
+
+#pragma function(memcpy)
+#pragma function(memset)
+
+static void * __cdecl memcpy(void* pvDst,
+	void const* pvSrc,
+	unsigned __int64 cbSize)
+{
+	unsigned char *pcSrc = NULL;
+	unsigned char *pcDst = NULL;
+	unsigned __int64 *pqwSrc = (unsigned __int64 *)pvSrc;
+	unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
+	unsigned __int64 i;
+
+	if ((NULL == pvDst)
+		|| (NULL == pvSrc)
+		|| (0 == cbSize))
+	{
+		// Invalid parameters
+		return NULL;
+	}
+
+	// Copy bytes in unsigned __int64 increments to make things a bit faster
+	for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
+	{
+		pqwDst[i] = pqwSrc[i];
+	}
+
+	// Copy the remaining bytes as regular chars
+	pcSrc = (unsigned char *)((unsigned __int64)pvSrc + i * sizeof(unsigned __int64));
+	pcDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
+	for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
+	{
+		pcDst[i] = pcSrc[i];
+	}
+
+	return pvDst;
+}
+
+static void * __cdecl memset(void* pvDst,
+	int iValue,
+	unsigned __int64 cbSize)
+{
+	unsigned char ucValue = (unsigned char)iValue;
+	unsigned char *pucDst = NULL;
+	unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
+	unsigned __int64 qwValue = 0;
+	unsigned char *pucValue = (unsigned char *)&qwValue;
+	unsigned __int64 i = 0;
+
+	if ((NULL == pvDst)
+		|| (0 == cbSize))
+	{
+		// Invalid parameters
+		return NULL;
+	}
+
+	// Build a unsigned __int64 with all bytes set to ucValue
+	for (i = 0; i < sizeof(qwValue); i++)
+	{
+		pucValue[i] = ucValue;
+	}
+
+	// Set bytes in unsigned __int64 increments to make things a bit faster
+	for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
+	{
+		pqwDst[i] = qwValue;
+	}
+
+	// Set the remaining bytes as regular chars
+	pucDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
+	for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
+	{
+		pucDst[i] = ucValue;
+	}
+
+	return pvDst;
+}
 
 /* ------------------------------------------------------------------------- */
 
@@ -433,6 +525,25 @@ void *umm_malloc( umm_heap_t *heap, unsigned __int64 size ) {
 
 /* ------------------------------------------------------------------------ */
 
+// https://github.com/eokeeffe/C-code/blob/master/C-FAQ/memmove.c
+void *memmove(void *dest, void const *src, unsigned __int64 n)
+{
+	char *dp = dest;
+	char const *sp = src;
+	if (dp < sp) {
+		while (n-- > 0)
+			*dp++ = *sp++;
+	}
+	else {
+		dp += n;
+		sp += n;
+		while (n-- > 0)
+			*--dp = *--sp;
+	}
+
+	return dest;
+}
+
 void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
 
   unsigned short int blocks;
@@ -613,3 +724,5 @@ void *umm_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int64 item_
 }
 
 /* ------------------------------------------------------------------------ */
+
+#pragma warning(pop)
