@@ -28,7 +28,7 @@ int umm_integrity_check(umm_heap_t *heap) {
   unsigned short int cur;
 
   if (!heap) {
-	ok = 0;
+    ok = 0;
     goto clean;
   }
 
@@ -86,7 +86,7 @@ int umm_integrity_check(umm_heap_t *heap) {
     if ((UMM_NBLOCK(heap, cur) & UMM_FREELIST_MASK)
         != (UMM_PBLOCK(heap, cur) & UMM_FREELIST_MASK))
     {
-	  DBGLOG_ERROR("heap integrity broken: mask wrong at addr 0x%lx: n=0x%x, p=0x%x\n",
+      DBGLOG_ERROR("heap integrity broken: mask wrong at addr 0x%lx: n=0x%x, p=0x%x\n",
           (unsigned long)&UMM_NBLOCK(cur),
           (UMM_NBLOCK(heap, cur) & UMM_FREELIST_MASK),
           (UMM_PBLOCK(heap, cur) & UMM_FREELIST_MASK)
@@ -97,19 +97,19 @@ int umm_integrity_check(umm_heap_t *heap) {
 
     /* make sure the block list is sequential */
     if (cur <= prev ) {
-	  DBGLOG_ERROR("heap integrity broken: next block %d is before prev this one "
+      DBGLOG_ERROR("heap integrity broken: next block %d is before prev this one "
           "(in block %d, addr 0x%lx)\n", cur, prev,
           (unsigned long)&UMM_NBLOCK(heap, prev));
       ok = 0;
       goto clean;
     }
 
-	/* unmark */
+    /* unmark */
     UMM_PBLOCK(heap, cur) &= UMM_BLOCKNO_MASK;
 
     /* Check if prev block number matches */
     if (UMM_PBLOCK(heap, cur) != prev) {
-	  DBGLOG_ERROR("heap integrity broken: block links don't match: "
+      DBGLOG_ERROR("heap integrity broken: block links don't match: "
           "%d -> %d, but %d -> %d\n",
           prev, cur, cur, UMM_PBLOCK(heap, cur));
       ok = 0;

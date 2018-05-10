@@ -22,7 +22,7 @@ void *umm_info(umm_heap_t *heap, void *ptr, int force) {
   unsigned short int blockNo = 0;
 
   if ((!heap) || (!ptr)) {
-	  return 0; // Invalid parameters
+      return 0; // Invalid parameters
   }
 
   /* Protect the critical section... */
@@ -149,7 +149,7 @@ void *umm_info(umm_heap_t *heap, void *ptr, int force) {
 
 unsigned __int64 umm_free_heap_size( umm_heap_t *heap ) {
   if (!heap) {
-  	return 0;
+      return 0;
   }
   umm_info(heap, 0, 0);
   return (unsigned __int64)ummHeapInfo.freeBlocks * sizeof(umm_block_t);

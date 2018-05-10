@@ -15,8 +15,8 @@ struct umm_block_s;
 typedef struct umm_block_s umm_block_t;
 
 typedef struct umm_heap_s {
-	umm_block_t *root;
-	unsigned short int numblocks;
+    umm_block_t *root;
+    unsigned short int numblocks;
 } umm_heap_t;
 #pragma pack(pop)
 

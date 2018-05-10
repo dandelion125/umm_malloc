@@ -66,7 +66,7 @@ static int check_poison_block( umm_block_t *pblock ) {
 
   if (pblock->header.used.next & UMM_FREELIST_MASK) {
     DBGLOG_ERROR( "check_poison_block is called for free block 0x%lx\n", 
-		(unsigned long)pblock);
+        (unsigned long)pblock);
   } else {
     /* the block is used; let's check poison */
     unsigned char *pc = (unsigned char *)pblock->body.data;
@@ -163,7 +163,7 @@ void *umm_poison_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int6
   ret = umm_malloc(heap, size);
   
   if (ret) {
-	  memset(ret, 0x00, size);
+      memset(ret, 0x00, size);
   }
 
   ret = get_poisoned(ret, size);

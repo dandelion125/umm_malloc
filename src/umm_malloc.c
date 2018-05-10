@@ -42,91 +42,91 @@
 // We define these intrinsic functions ourselves to so we can remove the 
 // standard library dependency
 static void * __cdecl memcpy(
-	void* pvDst,
-	void const* pvSrc,
-	unsigned __int64 cbSize);
+    void* pvDst,
+    void const* pvSrc,
+    unsigned __int64 cbSize);
 
 static void * __cdecl memset(
-	void* pvDst,
-	int iValue,
-	unsigned __int64 cbSize);
+    void* pvDst,
+    int iValue,
+    unsigned __int64 cbSize);
 
 #pragma function(memcpy)
 #pragma function(memset)
 
 static void * __cdecl memcpy(void* pvDst,
-	void const* pvSrc,
-	unsigned __int64 cbSize)
+    void const* pvSrc,
+    unsigned __int64 cbSize)
 {
-	unsigned char *pcSrc = NULL;
-	unsigned char *pcDst = NULL;
-	unsigned __int64 *pqwSrc = (unsigned __int64 *)pvSrc;
-	unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
-	unsigned __int64 i;
+    unsigned char *pcSrc = NULL;
+    unsigned char *pcDst = NULL;
+    unsigned __int64 *pqwSrc = (unsigned __int64 *)pvSrc;
+    unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
+    unsigned __int64 i;
 
-	if ((NULL == pvDst)
-		|| (NULL == pvSrc)
-		|| (0 == cbSize))
-	{
-		// Invalid parameters
-		return NULL;
-	}
+    if ((NULL == pvDst)
+        || (NULL == pvSrc)
+        || (0 == cbSize))
+    {
+        // Invalid parameters
+        return NULL;
+    }
 
-	// Copy bytes in unsigned __int64 increments to make things a bit faster
-	for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
-	{
-		pqwDst[i] = pqwSrc[i];
-	}
+    // Copy bytes in unsigned __int64 increments to make things a bit faster
+    for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
+    {
+        pqwDst[i] = pqwSrc[i];
+    }
 
-	// Copy the remaining bytes as regular chars
-	pcSrc = (unsigned char *)((unsigned __int64)pvSrc + i * sizeof(unsigned __int64));
-	pcDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
-	for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
-	{
-		pcDst[i] = pcSrc[i];
-	}
+    // Copy the remaining bytes as regular chars
+    pcSrc = (unsigned char *)((unsigned __int64)pvSrc + i * sizeof(unsigned __int64));
+    pcDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
+    for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
+    {
+        pcDst[i] = pcSrc[i];
+    }
 
-	return pvDst;
+    return pvDst;
 }
 
 static void * __cdecl memset(void* pvDst,
-	int iValue,
-	unsigned __int64 cbSize)
+    int iValue,
+    unsigned __int64 cbSize)
 {
-	unsigned char ucValue = (unsigned char)iValue;
-	unsigned char *pucDst = NULL;
-	unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
-	unsigned __int64 qwValue = 0;
-	unsigned char *pucValue = (unsigned char *)&qwValue;
-	unsigned __int64 i = 0;
+    unsigned char ucValue = (unsigned char)iValue;
+    unsigned char *pucDst = NULL;
+    unsigned __int64 *pqwDst = (unsigned __int64 *)pvDst;
+    unsigned __int64 qwValue = 0;
+    unsigned char *pucValue = (unsigned char *)&qwValue;
+    unsigned __int64 i = 0;
 
-	if ((NULL == pvDst)
-		|| (0 == cbSize))
-	{
-		// Invalid parameters
-		return NULL;
-	}
+    if ((NULL == pvDst)
+        || (0 == cbSize))
+    {
+        // Invalid parameters
+        return NULL;
+    }
 
-	// Build a unsigned __int64 with all bytes set to ucValue
-	for (i = 0; i < sizeof(qwValue); i++)
-	{
-		pucValue[i] = ucValue;
-	}
+    // Build a unsigned __int64 with all bytes set to ucValue
+    for (i = 0; i < sizeof(qwValue); i++)
+    {
+        pucValue[i] = ucValue;
+    }
 
-	// Set bytes in unsigned __int64 increments to make things a bit faster
-	for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
-	{
-		pqwDst[i] = qwValue;
-	}
+    // Set bytes in unsigned __int64 increments to make things a bit faster
+    for (i = 0; i < (cbSize / sizeof(unsigned __int64)); i++)
+    {
+        pqwDst[i] = qwValue;
+    }
 
-	// Set the remaining bytes as regular chars
-	pucDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
-	for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
-	{
-		pucDst[i] = ucValue;
-	}
+    // Set the remaining bytes as regular chars
+    pucDst = (unsigned char *)((unsigned __int64)pvDst + i * sizeof(unsigned __int64));
+    for (i = 0; i < (cbSize % sizeof(unsigned __int64)); i++)
+    {
+        pucDst[i] = ucValue;
+    }
 
-	return pvDst;
+    return pvDst;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -215,7 +215,7 @@ static unsigned short int umm_blocks( unsigned __int64 size ) {
  * Note that free pointers are NOT modified by this function.
  */
 static void umm_split_block( umm_heap_t *heap, 
-	unsigned short int c,
+    unsigned short int c,
     unsigned short int blocks,
     unsigned short int new_freemask ) {
 
@@ -271,8 +271,8 @@ static void umm_assimilate_up( umm_heap_t *heap, unsigned short int c ) {
  */
 
 static unsigned short int umm_assimilate_down( umm_heap_t *heap, 
-	unsigned short int c, 
-	unsigned short int freemask ) {
+    unsigned short int c, 
+    unsigned short int freemask ) {
 
   UMM_NBLOCK(heap, UMM_PBLOCK(heap, c)) = UMM_NBLOCK(heap, c) | freemask;
   UMM_PBLOCK(heap, UMM_NBLOCK(heap, c)) = UMM_PBLOCK(heap, c);
@@ -284,7 +284,7 @@ static unsigned short int umm_assimilate_down( umm_heap_t *heap,
 
 void  umm_init( void *heap_address, unsigned __int64 heap_size, umm_heap_t *heap ) {
   if ((!heap_address) || (0 == heap_size) || (!heap)) {
-		return; // Invalid parameters
+        return; // Invalid parameters
   }
 
   /* init heap pointer and size, and memset it to 0 */
@@ -349,7 +349,7 @@ void umm_free( umm_heap_t *heap, void *ptr ) {
   unsigned short int c;
 
   if (!heap) {
-	  return;
+      return;
   }
 
   /* If we're being asked to free a NULL pointer, well that's just silly! */
@@ -528,20 +528,20 @@ void *umm_malloc( umm_heap_t *heap, unsigned __int64 size ) {
 // https://github.com/eokeeffe/C-code/blob/master/C-FAQ/memmove.c
 void *memmove(void *dest, void const *src, unsigned __int64 n)
 {
-	char *dp = dest;
-	char const *sp = src;
-	if (dp < sp) {
-		while (n-- > 0)
-			*dp++ = *sp++;
-	}
-	else {
-		dp += n;
-		sp += n;
-		while (n-- > 0)
-			*--dp = *--sp;
-	}
+    char *dp = dest;
+    char const *sp = src;
+    if (dp < sp) {
+        while (n-- > 0)
+            *dp++ = *sp++;
+    }
+    else {
+        dp += n;
+        sp += n;
+        while (n-- > 0)
+            *--dp = *--sp;
+    }
 
-	return dest;
+    return dest;
 }
 
 void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
@@ -568,9 +568,9 @@ void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
   */
 
   if (((void *)NULL == ptr)) {
-	  DBGLOG_DEBUG("realloc the NULL pointer - call malloc()\n");
+      DBGLOG_DEBUG("realloc the NULL pointer - call malloc()\n");
 
-	  return umm_malloc(heap, size);
+      return umm_malloc(heap, size);
   }
 
   /*
@@ -580,11 +580,11 @@ void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
   */
 
   if (0 == size) {
-	  DBGLOG_DEBUG("realloc to 0 size, just free the block\n");
+      DBGLOG_DEBUG("realloc to 0 size, just free the block\n");
 
-	  umm_free(heap, ptr);
+      umm_free(heap, ptr);
 
-	  return NULL;
+      return NULL;
   }
 
   /*
@@ -623,7 +623,7 @@ void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
 
   if ((UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_FREELIST_MASK)) {
       nextBlockSize = (UMM_NBLOCK(heap, UMM_NBLOCK(heap, c)) & UMM_BLOCKNO_MASK)
-		  - UMM_NBLOCK(heap, c);
+          - UMM_NBLOCK(heap, c);
   }
 
   if ((UMM_NBLOCK(heap, UMM_PBLOCK(heap, c)) & UMM_FREELIST_MASK)) {
@@ -631,7 +631,7 @@ void *umm_realloc( umm_heap_t *heap, void *ptr, unsigned __int64 size ) {
   }
 
   DBGLOG_DEBUG( "realloc blocks %i blockSize %i nextBlockSize %i prevBlockSize %i\n",
-	  blocks, blockSize, nextBlockSize, prevBlockSize );
+      blocks, blockSize, nextBlockSize, prevBlockSize );
 
   /*
    * Ok, now that we're here we know how many blocks we want and the current
@@ -717,7 +717,7 @@ void *umm_calloc( umm_heap_t *heap, unsigned __int64 num, unsigned __int64 item_
   ret = umm_malloc( heap, (unsigned __int64)(item_size * num));
 
   if (ret) {
-	  memset(ret, 0x00, (unsigned __int64)(item_size * num));
+      memset(ret, 0x00, (unsigned __int64)(item_size * num));
   }
 
   return ret;
